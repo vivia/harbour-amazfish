@@ -19,6 +19,7 @@
 #include <QObject>
 #include <QMutex>
 #include <QDBusReply>
+#include <QtCore/QTimer>
 
 const char* CommunicatorV2::BASE_UUID                   = "6a4e%1-667b-11e3-949a-0800200c9a66";
 const char* CommunicatorV2::UUID_SERVICE_GARMIN_ML_GFDI = "6a4e2800-667b-11e3-949a-0800200c9a66";
@@ -214,12 +215,27 @@ void CommunicatorV2::processSendQueue()
     mState->characteristicSend->writeValue(item.first,&errorMsg);
 
     qDebug() <<Q_FUNC_INFO << "Garmin: writing result:" << errorMsg;
-    if (!errorMsg.isEmpty())
-    {
+    if (errorMsg.isEmpty()) {
+        mSendRetries = 0;
+    } else {
         qWarning() << Q_FUNC_INFO <<"Garmin: Could not send message: " << errorMsg;
+        mSendRetries++;
+        if (mSendRetries <= 4) {
+            mSendQueue.prepend(item);
+            QTimer::singleShot(200 * mSendRetries, this, &CommunicatorV2::processSendQueue);
+        } else {
+            qWarning() << Q_FUNC_INFO <<"Garmin: giving up on" << item.second;
+            mSendRetries = 0;
+            if (!mSendQueue.isEmpty()) {
+                QTimer::singleShot(200, this, &CommunicatorV2::processSendQueue);
+            }
+        }
     }
+
     mSendInProgress = false;
-    if (!mSendQueue.isEmpty()) processSendQueue();
+    if (errorMsg.isEmpty() && !mSendQueue.isEmpty()) {
+        processSendQueue();
+    }
 
 }
 
@@ -855,6 +871,7 @@ void CommunicatorV2::dispose() {
 
     mSendQueue.clear();
     mSendInProgress = false;
+    mSendRetries = 0;
     mState->mlrCommunicators.clear();
     mState->serviceByHandle.clear();
     mState->serviceCallbacks.clear();
