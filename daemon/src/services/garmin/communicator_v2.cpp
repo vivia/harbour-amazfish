@@ -441,6 +441,7 @@ void CommunicatorV2::onDownloadRequestStatus(quint8 status, quint8 downloadStatu
     }
     mFileBytes.clear();
     mFileExpectedSize = fileSize;
+    mFileRunningCrc = 0;
     openDebugFile();
     mFileTransferState = FileTransferState::ReceivingDir;
 }
@@ -459,6 +460,18 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
         mFileBytes.clear();
         return;
     }
+    // The crc in the chunk covers every file byte up to and including this chunk.
+    const quint16 runningCrc = computeCrc16(mFileRunningCrc, chunk.bytes);
+    if (runningCrc != chunk.crc) {
+        qDebug() << Q_FUNC_INFO << "Garmin: chunk crc mismatch at offset" << chunk.dataOffset
+                 << "computed" << QString::number(runningCrc, 16)
+                 << "watch said" << QString::number(chunk.crc, 16);
+        mFileOut.close();
+        mFileTransferState = FileTransferState::Idle;
+        mFileBytes.clear();
+        return;
+    }
+    mFileRunningCrc = runningCrc;
     mFileBytes.append(chunk.bytes);
     if (mFileOut.isOpen() && mFileOut.write(chunk.bytes) != chunk.bytes.size()) {
         // A failing debug copy must not abort the transfer itself.
@@ -477,6 +490,8 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
         return;
     }
     mFileOut.close();
+    qDebug() << Q_FUNC_INFO << "Garmin: file complete," << mFileBytes.size()
+             << "bytes, running crc" << QString::number(mFileRunningCrc, 16);
     if (!mFileTransferPath.isEmpty()) {
         qDebug() << Q_FUNC_INFO << "Garmin: saved" << mFileBytes.size() << "bytes to" << mFileTransferPath;
     }
@@ -1132,6 +1147,7 @@ void CommunicatorV2::dispose() {
     mFileTransferState = FileTransferState::Idle;
     mFileOut.close();
     mFileBytes.clear();
+    mFileRunningCrc = 0;
     mState->mlrCommunicators.clear();
     mState->serviceByHandle.clear();
     mState->serviceCallbacks.clear();
