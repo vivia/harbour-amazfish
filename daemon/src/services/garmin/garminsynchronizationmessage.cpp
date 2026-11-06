@@ -25,21 +25,19 @@ void GarminSynchronizationMessage::parse(const QByteArray& data)
     SynchronizationMessage msg;
     msg.synchronizationType = syncType;
     msg.fileTypeBitmask = bitmask;
-    //TODO: handle the message in Commuicator!
+    if (mCommunicator) {
+        mCommunicator->onSynchronizationReceived(msg);
+    }
     // first need to send synch ack
     qDebug() << Q_FUNC_INFO << "Garmin: Send synchronization ack";
     sendSynchronizationAck();
-    const quint64 workout= 1 <<3;
-    const quint64 activities = 1 << 5;
-    const quint64 activity_summary = 1 <<21;
-    const quint64 sleep = 1 <<26;
 
-    if ((bitmask & ( workout | activities | activity_summary | sleep))) {
+    if (msg.shouldProceed()) {
         //should proceed
         qDebug() << Q_FUNC_INFO << "Garmin: Synchronization should proceed";
         // Now should send filter message
         sendFilterMessage(3);
-     }
+    }
 }
 
 void GarminSynchronizationMessage::sendSynchronizationAck() {
