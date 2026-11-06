@@ -61,6 +61,7 @@ private:
     void parseSynchronization(const QByteArray& data);
     void parseWeatherRequest(const QByteArray& data);
     void parseFilterStatus(const QByteArray& data);
+    void parseFileTransferData(const QByteArray& data);
     void parseProtobufRequest(const QByteArray& data);
     void parseProtobufResponse(const QByteArray& data);
     void parseAuthNegotiation(const QByteArray &data);
@@ -88,7 +89,7 @@ public:
     static QByteArray supportedFileTypesRequest();
     static QByteArray deviceSettings();
     static QByteArray systemEvent(quint8 eventType, quint8 value);
-
+    static QByteArray downloadRequest(quint16 fileIndex, qint32 dataSize);
 };
 
 

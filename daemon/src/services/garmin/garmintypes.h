@@ -356,6 +356,15 @@ struct FilterStatusMessage {
     quint8 filterType{};
 };
 
+// File Transfer Data (5004): one chunk of a file the watch is sending
+
+struct FileTransferDataChunk {
+    quint8 flags {};
+    quint16 crc {};
+    qint32 dataOffset {};
+    QByteArray bytes;
+};
+
 // Weather Request Message (5014)
 
 struct WeatherRequestMessage {

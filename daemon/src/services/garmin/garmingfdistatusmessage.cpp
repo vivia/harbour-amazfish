@@ -64,6 +64,8 @@ void GarminGfdiStatusMessage::parse(const QByteArray& data)
         */
     case MessageId::DownloadRequest:
         qDebug() << Q_FUNC_INFO << "Garmin: Detected " << messageIdToString(originalMessageType).value();
+        handleDownloadRequestStatus(data);
+        handled = true;
         break;
     case MessageId::FileTransferData:
         qDebug() << Q_FUNC_INFO << "Garmin: Detected " << messageIdToString(originalMessageType).value();
@@ -188,6 +190,20 @@ void GarminGfdiStatusMessage::handleFitStatus(const quint16 originalMessageType,
 
     if (mCommunicator) {
         mCommunicator->onFitStatusReceived(static_cast<MessageId>(originalMessageType), status, subStatus);
+    }
+}
+
+void GarminGfdiStatusMessage::handleDownloadRequestStatus(const QByteArray& data)
+{
+    // Reply to our DownloadRequest: [origMsgId][status][downloadStatus][fileSize].
+    if (data.size() < 8) {
+        return;
+    }
+    const quint8 status = u8le(data, 2);
+    const quint8 downloadStatus = u8le(data, 3);
+    const qint32 fileSize = i32le(data, 4);
+    if (mCommunicator) {
+        mCommunicator->onDownloadRequestStatus(status, downloadStatus, fileSize);
     }
 }
 
