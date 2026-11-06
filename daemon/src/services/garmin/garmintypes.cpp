@@ -176,12 +176,17 @@ QString serviceToString(Service s) {
 
 quint16 computeCrc16(const QByteArray& data)
 {
+    return computeCrc16(0, data);
+}
+
+quint16 computeCrc16(quint16 seed, const QByteArray& data)
+{
     static const quint16 C[16] = {
         0x0000,0xCC01,0xD801,0x1400,0xF001,0x3C00,0x2800,0xE401,
         0xA001,0x6C00,0x7800,0xB401,0x5000,0x9C01,0x8801,0x4400
     };
 
-    quint16 crc = 0;
+    quint16 crc = seed;
 
     for (quint8 b : data) {
         crc = (((crc >> 4) & 0x0FFF) ^ C[crc & 0x0F]) ^ C[b & 0x0F];

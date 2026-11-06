@@ -293,6 +293,7 @@ private:
     FileTransferState mFileTransferState = FileTransferState::Idle;
     QByteArray mFileBytes;
     qint32 mFileExpectedSize = 0;
+    quint16 mFileRunningCrc = 0;
     QFile mFileOut;
     QString mFileTransferPath;
 
