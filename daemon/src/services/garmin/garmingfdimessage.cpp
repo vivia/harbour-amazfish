@@ -130,11 +130,13 @@ void GarminGfdiMessage::parse(const QByteArray& data) {
     case MessageId::NotificationSubscription:
         parseNotificationSubscription(data.mid(offset));
         return;
-        /*
     case MessageId::Synchronization:
         parseSynchronization(data.mid(offset));
         return;
-        */
+    case MessageId::FileAvailable:
+        // Ack only for now; fetching the announced file comes with the transfer work.
+        mCommunicator->sendMessage("FILE AVAILABLE ACK", GfdiMessageGenerator::ackResponse(msgId));
+        return;
     case MessageId::WeatherRequest:
         // No status reply here: the FIT definition that follows is the answer.
         parseWeatherRequest(data.mid(offset));

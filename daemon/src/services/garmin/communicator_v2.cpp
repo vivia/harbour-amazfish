@@ -390,14 +390,15 @@ void CommunicatorV2::onFindPhoneCancel()
 }
 
 void CommunicatorV2::onSynchronizationReceived(const SynchronizationMessage& msg) {
-    Q_UNUSED(msg);
-    qDebug() << Q_FUNC_INFO;
+    mSynchronizationType = msg.synchronizationType;
+    mFileTypeBitmask = msg.fileTypeBitmask;
+    qDebug() << Q_FUNC_INFO << "Garmin: sync type" << msg.synchronizationType << "bitmask"
+             << hex << msg.fileTypeBitmask;
 }
 
 void CommunicatorV2::onFilterStatusReceived(const FilterStatusMessage& msg) {
-    Q_UNUSED(msg);
-    qDebug() << Q_FUNC_INFO;
-
+    qDebug() << Q_FUNC_INFO << "Garmin: filter status" << static_cast<int>(msg.status)
+             << "filter type" << msg.filterType;
 }
 
 void CommunicatorV2::onWeatherRequestReceived(const WeatherRequestMessage& msg) {

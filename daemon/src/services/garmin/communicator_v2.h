@@ -275,6 +275,10 @@ private:
     WeatherTransferState mWeatherState = WeatherTransferState::Idle;
     QByteArray mWeatherDataPayload;
     QTimer* mWeatherTimeout = nullptr;
+
+    // Last Synchronization (5037) the watch sent; decides what a download may ask for.
+    quint8 mSynchronizationType = 0;
+    quint64 mFileTypeBitmask = 0;
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;

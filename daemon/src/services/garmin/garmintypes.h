@@ -143,15 +143,17 @@ enum class NotificationAction {
     BLOCK_APPLICATION = 99
 };
 
-
 enum class MessageId : quint16 {
     Response = 5000,
     DownloadRequest = 5002,
     UploadRequest = 5003,
     FileTransferData = 5004,
     CreateFile = 5005,
+    Packet = 5006,
     Filter = 5007,
     SetFileFlag = 5008,
+    FileAvailable = 5009,
+    Checksum = 5010,
     FitDefinition = 5011,
     FitData = 5012,
     WeatherRequest = 5014,
@@ -184,8 +186,14 @@ inline std::optional<MessageId> messageIdFromU16(quint16 id) {
     case 5003: return MessageId::UploadRequest;
     case 5004: return MessageId::FileTransferData;
     case 5005: return MessageId::CreateFile;
+    case 5006:
+        return MessageId::Packet;
     case 5007: return MessageId::Filter;
     case 5008: return MessageId::SetFileFlag;
+    case 5009:
+        return MessageId::FileAvailable;
+    case 5010:
+        return MessageId::Checksum;
     case 5011: return MessageId::FitDefinition;
     case 5012: return MessageId::FitData;
     case 5014: return MessageId::WeatherRequest;
@@ -219,8 +227,14 @@ inline std::optional<QString> messageIdToString(quint16 id) {
     case 5003: return "UploadRequest";
     case 5004: return "FileTransferData";
     case 5005: return "CreateFile";
+    case 5006:
+        return "Packet";
     case 5007: return "Filter";
     case 5008: return "SetFileFlag";
+    case 5009:
+        return "FileAvailable";
+    case 5010:
+        return "Checksum";
     case 5011: return "FitDefinition";
     case 5012: return "FitData";
     case 5014: return "WeatherRequest";
