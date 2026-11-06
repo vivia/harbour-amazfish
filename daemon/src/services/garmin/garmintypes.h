@@ -429,6 +429,9 @@ using GfdiMessage = std::variant<
 
 // Helper functions
 quint16 computeCrc16(const QByteArray& data);
+// A file transfer chunk carries the crc of every file byte up to and including itself, so each
+// chunk is checked by feeding the previous result back in as the seed.
+quint16 computeCrc16(quint16 seed, const QByteArray& data);
 QByteArray wrapInGfdiEnvelope(MessageId messageId, const QByteArray& payload);
 quint16 le16(const char* p);
 quint32 le32(const char* p);
