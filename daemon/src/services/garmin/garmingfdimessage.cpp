@@ -2,19 +2,18 @@
 #include <QChar>
 
 #include "communicator_v2.h"
-#include "garmindeviceinformationmessage.h"
-#include "garmincurrenttimemessage.h"
+#include "garminauthnegotiationmessage.h"
 #include "garminconfigurationmessage.h"
-#include "garminnotificationsubscriptionmessage.h"
-#include "garminnotificationcontrolmessage.h"
-#include "garminsynchronizationmessage.h"
-#include "garminweathermessage.h"
+#include "garmincurrenttimemessage.h"
+#include "garmindeviceinformationmessage.h"
+#include "garminfiletransferdatamessage.h"
 #include "garminfilterstatusmessage.h"
 #include "garmingfdistatusmessage.h"
+#include "garminnotificationcontrolmessage.h"
+#include "garminnotificationsubscriptionmessage.h"
 #include "garminprotobufmessage.h"
-#include "garminauthnegotiationmessage.h"
-
-
+#include "garminsynchronizationmessage.h"
+#include "garminweathermessage.h"
 
 Result<QString> GarminGfdiMessage::readLengthPrefixedString(const QByteArray& data, int& consumedBytes)
 {
@@ -137,6 +136,9 @@ void GarminGfdiMessage::parse(const QByteArray& data) {
         // Ack only for now; fetching the announced file comes with the transfer work.
         mCommunicator->sendMessage("FILE AVAILABLE ACK", GfdiMessageGenerator::ackResponse(msgId));
         return;
+    case MessageId::FileTransferData:
+        parseFileTransferData(data.mid(offset));
+        return;
     case MessageId::WeatherRequest:
         // No status reply here: the FIT definition that follows is the answer.
         parseWeatherRequest(data.mid(offset));
@@ -238,6 +240,12 @@ void GarminGfdiMessage::parseNotificationSubscription(const QByteArray& data)
 void GarminGfdiMessage::parseSynchronization(const QByteArray& data)
 {
     GarminSynchronizationMessage msg(mCommunicator);
+    msg.parse(data);
+}
+
+void GarminGfdiMessage::parseFileTransferData(const QByteArray& data)
+{
+    GarminFileTransferDataMessage msg(mCommunicator);
     msg.parse(data);
 }
 
@@ -389,3 +397,16 @@ QByteArray GfdiMessageGenerator::systemEvent(quint8 eventType, quint8 value)
     return wrapInGfdiEnvelope(MessageId::SystemEvent, m);
 }
 
+QByteArray GfdiMessageGenerator::downloadRequest(quint16 fileIndex, qint32 dataSize)
+{
+    // Ask for a file, or for the root directory when fileIndex is 0.
+    // Body: [fileIndex][data offset][request type NEW][crc seed][size][flags].
+    QByteArray m;
+    writeU16le(m, fileIndex);
+    writeU32le(m, 0);
+    m.append(char(1)); // request type: NEW
+    writeU16le(m, 0);
+    writeU32le(m, quint32(dataSize));
+    m.append(char(0));
+    return wrapInGfdiEnvelope(MessageId::DownloadRequest, m);
+}
