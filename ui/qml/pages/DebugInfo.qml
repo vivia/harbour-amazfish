@@ -12,6 +12,10 @@ PagePL {
 
     property int _lastNotificationId: 1
 
+    // Set once the page has read its stored values, so restoring a switch
+    // does not write it straight back.
+    property bool _ready: false
+
     pageMenu: PageMenuPL {
         PageMenuItemPL {
             iconSource: styler.iconRefresh !== undefined ? styler.iconRefresh : ""
@@ -366,6 +370,25 @@ PagePL {
                 DaemonInterfaceInstance.enableFeature(Amazfish.FEATURE_MUSIC_CONTROL);
             }
         }
+        SectionHeaderPL {
+            text: qsTr("Downloaded Data")
+        }
+
+        TextSwitchPL {
+            id: chkGarminSaveDownloads
+            width: parent.width
+            text: qsTr("Save downloaded activity files (Garmin only)")
+
+            Component.onCompleted: {
+                chkGarminSaveDownloads.checked = AmazfishConfig.deviceGarminSaveDownloads;
+            }
+
+            onCheckedChanged: {
+                if (_ready) {
+                    AmazfishConfig.deviceGarminSaveDownloads = checked;
+                }
+            }
+        }
         Connections {
             target: DaemonInterfaceInstance
             onInformationChanged: {
@@ -404,6 +427,7 @@ Component.onCompleted: {
     activityDateNav.day = activityDate;
     sportDate = new Date(AmazfishConfig.lastSportSync);
     sportDateNav.day = sportDate;
+    _ready = true;
 }
 
 }

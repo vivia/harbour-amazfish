@@ -282,22 +282,23 @@ private:
     quint8 mSynchronizationType = 0;
     quint64 mFileTypeBitmask = 0;
 
-    // Classic GFDI file download. Chunks go straight to disk so a failed
-    // parse can be retried without asking the watch again. Only the root
-    // directory is fetched so far; per-file states arrive with the FIT pull.
+    // Classic GFDI file download. Only the root directory is fetched so far,
+    // so a RAM buffer is enough; per-file FIT downloads will need streaming.
+    // deviceGarminSaveDownloads keeps a copy of the raw bytes for re-parsing.
     enum class FileTransferState {
         Idle,
         WaitingDirStatus,
         ReceivingDir
     };
     FileTransferState mFileTransferState = FileTransferState::Idle;
+    QByteArray mFileBytes;
+    qint32 mFileExpectedSize = 0;
     QFile mFileOut;
     QString mFileTransferPath;
-    qint32 mFileReceived = 0;
-    qint32 mFileExpectedSize = 0;
 
     QString garminFileDir();
-    void logDirectoryEntries(const QString& path);
+    void openDebugFile();
+    void logDirectoryEntries();
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;

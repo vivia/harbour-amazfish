@@ -439,20 +439,9 @@ void CommunicatorV2::onDownloadRequestStatus(quint8 status, quint8 downloadStatu
         mFileTransferState = FileTransferState::Idle;
         return;
     }
-    const QString dir = garminFileDir();
-    if (dir.isEmpty()) {
-        mFileTransferState = FileTransferState::Idle;
-        return;
-    }
-    mFileTransferPath = dir + "/directory.bin";
-    mFileOut.setFileName(mFileTransferPath);
-    if (!mFileOut.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        qDebug() << Q_FUNC_INFO << "Garmin: cannot write" << mFileTransferPath << mFileOut.errorString();
-        mFileTransferState = FileTransferState::Idle;
-        return;
-    }
+    mFileBytes.clear();
     mFileExpectedSize = fileSize;
-    mFileReceived = 0;
+    openDebugFile();
     mFileTransferState = FileTransferState::ReceivingDir;
 }
 
@@ -462,35 +451,38 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
         qDebug() << Q_FUNC_INFO << "Garmin: file chunk while not receiving, dropping";
         return;
     }
-    if (chunk.dataOffset != mFileReceived) {
-        qDebug() << Q_FUNC_INFO << "Garmin: chunk offset mismatch, expected" << mFileReceived
+    if (chunk.dataOffset != qint32(mFileBytes.size())) {
+        qDebug() << Q_FUNC_INFO << "Garmin: chunk offset mismatch, expected" << mFileBytes.size()
                  << "got" << chunk.dataOffset;
         mFileOut.close();
         mFileTransferState = FileTransferState::Idle;
+        mFileBytes.clear();
         return;
     }
-    if (mFileOut.write(chunk.bytes) != chunk.bytes.size()) {
-        qDebug() << Q_FUNC_INFO << "Garmin: write failed" << mFileOut.errorString();
+    mFileBytes.append(chunk.bytes);
+    if (mFileOut.isOpen() && mFileOut.write(chunk.bytes) != chunk.bytes.size()) {
+        // A failing debug copy must not abort the transfer itself.
+        qDebug() << Q_FUNC_INFO << "Garmin: debug write failed" << mFileOut.errorString();
         mFileOut.close();
-        mFileTransferState = FileTransferState::Idle;
-        return;
     }
-    mFileReceived += chunk.bytes.size();
     // Status frame for the chunk: echoed message id, ack, transfer status OK, then the number
     // of bytes we have received so far.
     QByteArray r;
     writeU16le(r, quint16(MessageId::FileTransferData));
     r.append(char(Status::Ack)); // Status: ACK
     r.append(char(0x00)); // TransferStatus: OK
-    writeU32le(r, quint32(mFileReceived));
+    writeU32le(r, quint32(mFileBytes.size()));
     sendMessage("CHUNK ACK", wrapInGfdiEnvelope(MessageId::Response, r));
-    if (mFileReceived < mFileExpectedSize) {
+    if (mFileBytes.size() < mFileExpectedSize) {
         return;
     }
     mFileOut.close();
-    qDebug() << Q_FUNC_INFO << "Garmin: saved" << mFileReceived << "bytes to" << mFileTransferPath;
-    logDirectoryEntries(mFileTransferPath);
+    if (!mFileTransferPath.isEmpty()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: saved" << mFileBytes.size() << "bytes to" << mFileTransferPath;
+    }
+    logDirectoryEntries();
     mFileTransferState = FileTransferState::Idle;
+    mFileBytes.clear();
 }
 
 QString CommunicatorV2::garminFileDir()
@@ -503,25 +495,36 @@ QString CommunicatorV2::garminFileDir()
     return dir.path();
 }
 
-void CommunicatorV2::logDirectoryEntries(const QString& path)
+void CommunicatorV2::openDebugFile()
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << Q_FUNC_INFO << "Garmin: cannot read back" << path << file.errorString();
+    mFileTransferPath.clear();
+    if (!AmazfishConfig::instance()->deviceGarminSaveDownloads()) {
         return;
     }
-    const QByteArray bytes = file.readAll();
-    file.close();
-    if (bytes.size() % 16 != 0) {
-        qDebug() << Q_FUNC_INFO << "Garmin: directory size" << bytes.size() << "is not a multiple of 16";
+    const QString dir = garminFileDir();
+    if (dir.isEmpty()) {
+        return;
     }
-    for (int off = 0; off + 16 <= bytes.size(); off += 16) {
-        const quint16 fileIndex = u16le(bytes, off);
-        const quint8 dataType = u8le(bytes, off + 2);
-        const quint8 subType = u8le(bytes, off + 3);
-        const quint16 fileNumber = u16le(bytes, off + 4);
-        const qint32 fileSize = i32le(bytes, off + 8);
-        const qint32 timestamp = i32le(bytes, off + 12);
+    mFileTransferPath = dir + "/directory.bin";
+    mFileOut.setFileName(mFileTransferPath);
+    if (!mFileOut.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qDebug() << Q_FUNC_INFO << "Garmin: cannot write" << mFileTransferPath << mFileOut.errorString();
+        mFileTransferPath.clear();
+    }
+}
+
+void CommunicatorV2::logDirectoryEntries()
+{
+    if (mFileBytes.size() % 16 != 0) {
+        qDebug() << Q_FUNC_INFO << "Garmin: directory size" << mFileBytes.size() << "is not a multiple of 16";
+    }
+    for (int off = 0; off + 16 <= mFileBytes.size(); off += 16) {
+        const quint16 fileIndex = u16le(mFileBytes, off);
+        const quint8 dataType = u8le(mFileBytes, off + 2);
+        const quint8 subType = u8le(mFileBytes, off + 3);
+        const quint16 fileNumber = u16le(mFileBytes, off + 4);
+        const qint32 fileSize = i32le(mFileBytes, off + 8);
+        const qint32 timestamp = i32le(mFileBytes, off + 12);
         if (fileIndex == 0 && dataType == 0 && subType == 0 && fileNumber == 0 && fileSize == 0
             && timestamp == 0) {
             continue; // all-zero padding entry
@@ -1128,6 +1131,7 @@ void CommunicatorV2::dispose() {
     resetWeatherTransfer();
     mFileTransferState = FileTransferState::Idle;
     mFileOut.close();
+    mFileBytes.clear();
     mState->mlrCommunicators.clear();
     mState->serviceByHandle.clear();
     mState->serviceCallbacks.clear();
