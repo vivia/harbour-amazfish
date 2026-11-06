@@ -129,6 +129,7 @@ set(SOURCES
 ./src/services/garmin/garminweathermessage.cpp
 ./src/services/garmin/fitweatherencoder.cpp
 ./src/services/garmin/garminfilterstatusmessage.cpp
+./src/services/garmin/garminfiletransferdatamessage.cpp
 ./src/services/garmin/garminnotificationupdatemessage.cpp
 ./src/services/garmin/garminnotificationdatamessage.cpp
 ./src/services/garmin/garminauthnegotiationmessage.cpp
@@ -285,6 +286,7 @@ set(HEADERS
 ./src/services/garmin/garminweathermessage.h
 ./src/services/garmin/fitweatherencoder.h
 ./src/services/garmin/garminfilterstatusmessage.h
+./src/services/garmin/garminfiletransferdatamessage.h
 ./src/services/garmin/garminnotificationupdatemessage.h
 ./src/services/garmin/garminnotificationdatamessage.h
 ./src/services/garmin/garminauthnegotiationmessage.h

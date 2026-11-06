@@ -10,8 +10,8 @@
 #include <QtCore/QMutex>
 #include <QtCore/QEventLoop>
 #include <QtCore/QTimer>
-#include <optional>
-#include <functional>
+
+#include <QtCore/QFile>
 
 #include "garmin/garmindevice.h"
 #include "garmintypes.h"
@@ -154,6 +154,8 @@ public:
     void onNotificationPerformAction(const NotificationControlMessage& msg);
     void onSynchronizationReceived(const SynchronizationMessage& msg);
     void onFilterStatusReceived(const FilterStatusMessage& msg);
+    void onDownloadRequestStatus(quint8 status, quint8 downloadStatus, qint32 fileSize);
+    void onFileTransferDataReceived(const FileTransferDataChunk& chunk);
     void onWeatherRequestReceived(const WeatherRequestMessage& msg);
     void onProtobufMessageReceived(const QByteArray& data);
     void onProtobufStatusMessageReceived(const QByteArray& data);
@@ -279,6 +281,23 @@ private:
     // Last Synchronization (5037) the watch sent; decides what a download may ask for.
     quint8 mSynchronizationType = 0;
     quint64 mFileTypeBitmask = 0;
+
+    // Classic GFDI file download. Chunks go straight to disk so a failed
+    // parse can be retried without asking the watch again. Only the root
+    // directory is fetched so far; per-file states arrive with the FIT pull.
+    enum class FileTransferState {
+        Idle,
+        WaitingDirStatus,
+        ReceivingDir
+    };
+    FileTransferState mFileTransferState = FileTransferState::Idle;
+    QFile mFileOut;
+    QString mFileTransferPath;
+    qint32 mFileReceived = 0;
+    qint32 mFileExpectedSize = 0;
+
+    QString garminFileDir();
+    void logDirectoryEntries(const QString& path);
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;
