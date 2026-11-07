@@ -1,14 +1,15 @@
 ﻿#include "communicator_v2.h"
-#include "devices/garmin/garmindevice.h"
-#include "cobscodec.h"      // CobsCoDec
-#include "garminmlr.h"   // MlrCommunicator (Qt)
-#include "garmintypes.h"
-#include "garmingfdimessage.h"
-#include "garminspo2message.h"
-#include "garminhrmmessage.h"
-#include "garminstepsmessage.h"
 #include "amazfishconfig.h"
+#include "cobscodec.h" // CobsCoDec
+#include "devices/garmin/garmindevice.h"
 #include "garmindevicestatusmessage.h"
+#include "garminfitreader.h"
+#include "garmingfdimessage.h"
+#include "garminhrmmessage.h"
+#include "garminmlr.h" // MlrCommunicator (Qt)
+#include "garminspo2message.h"
+#include "garminstepsmessage.h"
+#include "garmintypes.h"
 
 #include <QtCore/QStringList>
 #include <QtCore/QMetaObject>
@@ -524,6 +525,13 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     qDebug() << Q_FUNC_INFO << "Garmin: activity file" << mRequestedEntry.fileIndex
              << (mFileBytes.mid(8, 4) == QByteArrayLiteral(".FIT") ? "starts with .FIT"
                                                                    : "has no .FIT magic");
+    QVector<GarminFitMessage> fitMessages;
+    QString fitError;
+    if (parseGarminFitFile(mFileBytes, fitMessages, fitError)) {
+        logGarminFitSummary(fitMessages, mFileBytes.size());
+    } else {
+        qDebug() << Q_FUNC_INFO << "Garmin: cannot parse FIT file:" << fitError;
+    }
     mFileBytes.clear();
 }
 
