@@ -299,6 +299,7 @@ public:
     
     static Type fromBipType(int type);
     static Type fromZeppOsType(uint8_t type);
+    static Type fromFitSportType(uint8_t sport);
     static QString toString(Type type);
     static Type fromString(const QString& str);
     static Type fromHuamiRawType(int raw);
@@ -307,6 +308,7 @@ public:
 private:
     static const QMap<ActivityKind::Type, QString> m_typeNames;
     static const QMap<uint8_t, ActivityKind::Type> m_zepposTypes;
+    static const QMap<uint8_t, ActivityKind::Type> m_fitSportTypes;
     static const QMap<int, ActivityKind::Type> m_huamiTypes;
     static const QMap<int, ActivityKind::Type> m_huamiRawType;
 
