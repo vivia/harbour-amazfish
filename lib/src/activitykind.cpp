@@ -409,6 +409,87 @@ const QMap<uint8_t, ActivityKind::Type> ActivityKind::m_zepposTypes = {
     {0x4d, Zumba}
 };
 
+// Sport values from the FIT protocol, as sent by the Garmin file transfer.
+const QMap<uint8_t, ActivityKind::Type> ActivityKind::m_fitSportTypes = {
+    { 0, Activity }, // generic
+    { 1, Running },
+    { 2, Cycling },
+    { 3, Transition },
+    { 4, FitnessEquipment },
+    { 5, Swimming },
+    { 6, Basketball },
+    { 7, Soccer },
+    { 8, Tennis },
+    { 9, AmericanFootball },
+    { 10, Training },
+    { 11, Walking },
+    { 12, XcClassicSki },
+    { 13, Skiing },
+    { 14, Snowboarding },
+    { 15, Rowing },
+    { 16, Mountaineering },
+    { 17, Hiking },
+    { 18, Multisport },
+    { 19, Paddling },
+    { 20, Flying },
+    { 21, EBike },
+    { 22, Motorcycling },
+    { 23, Boating },
+    { 24, Driving },
+    { 25, Golf },
+    { 26, HangGliding },
+    { 27, Equestrian },
+    { 28, Hunting },
+    { 29, Fishing },
+    { 30, InlineSkating },
+    { 31, RockClimbing },
+    { 32, Sailing },
+    { 33, IceSkating },
+    { 34, SkyDiving },
+    { 35, Snowshoe },
+    { 36, Snowmobiling },
+    { 37, StandUpPaddleboarding },
+    { 38, Surfing },
+    { 39, Wakeboarding },
+    { 40, WaterSkiing },
+    { 41, Kayaking },
+    { 42, Rafting },
+    { 43, Windsurfing },
+    { 44, Kitesurfing },
+    { 45, Tactical },
+    { 46, Jumpmaster },
+    { 47, Boxing },
+    { 48, FloorClimbing },
+    { 49, Baseball },
+    { 53, Diving },
+    { 56, Shooting },
+    { 58, WinterSport },
+    { 59, Grinding },
+    { 62, Hiit },
+    { 63, VideoGaming },
+    { 64, Racket },
+    { 65, PushWalkSpeed },
+    { 66, PushRunSpeed },
+    { 67, Meditation },
+    { 68, ParaSport },
+    { 69, DiscGolf },
+    { 70, TeamSport },
+    { 71, Cricket },
+    { 72, Rugby },
+    { 73, Hockey },
+    { 74, Lacrosse },
+    { 75, Volleyball },
+    { 76, WaterTubing },
+    { 77, Wakesurfing },
+    { 78, OtherWaterSports },
+    { 79, Archery },
+    { 80, MixedMartialArts },
+    { 82, Snorkeling },
+    { 83, Dance },
+    { 84, JumpRope },
+    { 88, Canoeing }
+};
+
 const QMap<int, ActivityKind::Type> ActivityKind::m_huamiTypes = {
     {1, Running},
     {2, Treadmill},
@@ -453,6 +534,11 @@ ActivityKind::Type ActivityKind::fromZeppOsType(uint8_t type)
 {
     qDebug() << "Checking for zeppos activity type: " << type;
     return m_zepposTypes.value(type, Activity);
+}
+
+ActivityKind::Type ActivityKind::fromFitSportType(uint8_t sport)
+{
+    return m_fitSportTypes.value(sport, Unknown);
 }
 
 QString ActivityKind::toString(Type type)
