@@ -1,13 +1,14 @@
 #ifndef GARMIN_DEVICE__H
 #define GARMIN_DEVICE__H
 
-#include <QObject>
-#include <QSharedPointer>
 #include "abstractdevice.h"
 #include "services/garmin/communicator_v2.h"
+#include "services/garmin/garminfitreader.h"
 #include "services/garmin/garminnotificationhandler.h"
 #include "services/garmin/protobufhandler.h"
 
+#include <QObject>
+#include <QSharedPointer>
 
 class NotificationSpec;
 class GarminNotificationHandler;
@@ -55,6 +56,7 @@ private:
     void initialise();
     void onWeatherRequestReceived();
     void sendWeatherToWatch();
+    void onActivityFileParsed(const QString& activityId, const QVector<GarminFitMessage>& messages);
     virtual void refreshInformation() override;
 
     QString mPreferredService;

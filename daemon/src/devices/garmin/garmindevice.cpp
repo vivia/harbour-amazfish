@@ -6,8 +6,17 @@
 #include "services/garmin/garmintypes.h"
 #include "services/garmin/garminweathermessage.h"
 
+#include "activitysummary.h"
+#include "services/garmin/garminfitgpx.h"
+#include "services/garmin/garminfitsummary.h"
+
 #include <QDomDocument>
 #include <QStringList>
+
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
 
 const char* UUID_SERVICE_GARMIN_GFDI_V0 = "9b012401-bc30-ce9a-e111-0f67e491abde";
 const char* UUID_CHARACTERISTIC_GARMIN_GFDI_V0_SEND = "df334c80-e6a7-d082-274a-78fc66f85e16";
@@ -32,6 +41,7 @@ Amazfish::Features GarminDevice::supportedFeatures() const
     //HRM and steps should be supported on all devices
 
     return Amazfish::Feature::FEATURE_NONE
+        | Amazfish::Feature::FEATURE_ACTIVITY
         | Amazfish::Feature::FEATURE_HRM
         | Amazfish::Feature::FEATURE_STEPS
         | Amazfish::Feature::FEATURE_ALERT
@@ -259,6 +269,7 @@ QBLEService *GarminDevice::drv_createService(const QString &uuid, const QString 
         connect(mNotificationHandler.data(), &GarminNotificationHandler::acceptIncomingCall, this, &GarminDevice::onAnswerCallEvent);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::rejectIncomingCall, this, &GarminDevice::onRejectCallEvent);
         connect(com.data(), &CommunicatorV2::weatherRequestReceived, this, &GarminDevice::onWeatherRequestReceived, Qt::UniqueConnection);
+        connect(com.data(), &CommunicatorV2::activityFileParsed, this, &GarminDevice::onActivityFileParsed, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneRequested, this, &GarminDevice::onFindPhoneRequested, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneCancelled, this, &GarminDevice::onFindPhoneCancelled, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::musicControlCommand, this, &GarminDevice::onMusicControlCommand, Qt::UniqueConnection);
@@ -329,6 +340,50 @@ void GarminDevice::fetchData(Amazfish::DataTypes dataTypes)
     // The watch answers with a file list; the newest activity is what we want from it.
     if (!mCommunicator->requestDirectoryListing()) {
         emit message(tr("An operation is currently running, please try later"));
+    }
+}
+
+void GarminDevice::onActivityFileParsed(const QString& activityId, const QVector<GarminFitMessage>& messages)
+{
+    const QString lastSyncId = AmazfishConfig::instance()->value("device/lastsportsyncid").toString();
+    if (!lastSyncId.isEmpty() && activityId == lastSyncId) {
+        qDebug() << Q_FUNC_INFO << "Garmin: activity" << activityId << "was synced already";
+        return;
+    }
+
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return;
+    }
+
+    ActivitySummary summary;
+    if (!buildGarminFitSummary(messages, summary)) {
+        qDebug() << Q_FUNC_INFO << "Garmin: no session in the activity file, not saving";
+        return;
+    }
+
+    auto config = AmazfishConfig::instance();
+    summary.setProfileId(qHash(config->profileName()));
+    summary.setDeviceId(qHash(config->pairedAddress()));
+
+    QDir laufhelden(QDir::homePath() + "/Laufhelden/");
+    const QString gpxDir = laufhelden.exists() ? laufhelden.absolutePath()
+                                               : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QFile gpxFile(gpxDir + "/" + summary.name() + ".gpx");
+    if (gpxFile.open(QIODevice::WriteOnly)) {
+        QTextStream stream(&gpxFile);
+        stream << garminFitGpxText(messages);
+        gpxFile.close();
+        summary.setGPX(gpxFile.fileName());
+    } else {
+        qDebug() << Q_FUNC_INFO << "Garmin: cannot write" << gpxFile.fileName();
+    }
+
+    if (summary.saveToDatabase(m_conn)) {
+        AmazfishConfig::instance()->setValue("device/lastsportsyncid", activityId);
+        qDebug() << Q_FUNC_INFO << "Garmin: saved activity" << summary.name();
+    } else {
+        qDebug() << Q_FUNC_INFO << "Garmin: could not save activity" << summary.name();
     }
 }
 
