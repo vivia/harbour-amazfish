@@ -1,29 +1,30 @@
 #ifndef COMMUNICATORV2__H
 #define COMMUNICATORV2__H
 
-#include <QtCore/QObject>
 #include <QtCore/QByteArray>
-#include <QtCore/QString>
+#include <QtCore/QEventLoop>
 #include <QtCore/QHash>
+#include <QtCore/QMutex>
+#include <QtCore/QObject>
 #include <QtCore/QPointer>
 #include <QtCore/QSharedPointer>
-#include <QtCore/QMutex>
-#include <QtCore/QEventLoop>
+#include <QtCore/QString>
 #include <QtCore/QTimer>
 
 #include <QtCore/QFile>
 #include <QtCore/QVector>
 
-#include "garmin/garmindevice.h"
-#include "garmintypes.h"
 #include "cobscodec.h"
+#include "garmin/garmindevice.h"
+#include "garminfitreader.h"
 #include "garminmlr.h"
-#include "weather/currentweather.h"
 #include "garminprotobufmessage.h"
+#include "garmintypes.h"
+#include "weather/currentweather.h"
 
+#include <KDbConnection.h>
 #include <qbledevice.h>
 #include <qbleservice.h>
-#include <KDbConnection.h>
 
 #include <optional>
 
@@ -196,6 +197,9 @@ signals:
     // picked in the UI, not with the coordinates in the request, so the
     // request itself is not passed on.
     void weatherRequestReceived();
+    // A downloaded activity file was parsed. activityId is the timestamp from
+    // the watch's directory entry, used to remember what was saved already.
+    void activityFileParsed(const QString& activityId, const QVector<GarminFitMessage>& messages);
     // The watch asked the paired phone to make a sound, or to stop.
     void findPhoneRequested();
     void findPhoneCancelled();
