@@ -529,6 +529,7 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     QString fitError;
     if (parseGarminFitFile(mFileBytes, fitMessages, fitError)) {
         logGarminFitSummary(fitMessages, mFileBytes.size());
+        emit activityFileParsed(QString::number(mRequestedEntry.timestamp), fitMessages);
     } else {
         qDebug() << Q_FUNC_INFO << "Garmin: cannot parse FIT file:" << fitError;
     }
