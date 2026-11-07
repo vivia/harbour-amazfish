@@ -200,9 +200,9 @@ signals:
     // picked in the UI, not with the coordinates in the request, so the
     // request itself is not passed on.
     void weatherRequestReceived();
-    // A downloaded activity file was parsed. activityId is the timestamp from
+    // A downloaded activity file was parsed. fileStamp is the file time from
     // the watch's directory entry, used to remember what was saved already.
-    void activityFileParsed(const QString& activityId, const QVector<GarminFitMessage>& messages);
+    void activityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages);
     // The watch asked the paired phone to make a sound, or to stop.
     void findPhoneRequested();
     void findPhoneCancelled();
@@ -311,11 +311,13 @@ private:
     QFile mFileOut;
     QString mFileTransferPath;
     QVector<DirectoryEntry> mDirectory;
+    QVector<DirectoryEntry> mPendingActivities;
     DirectoryEntry mRequestedEntry;
 
     void openDebugFile(const QString& name);
     void logDirectoryEntries();
-    void requestNewestActivityFile();
+    void startActivityDownloads();
+    void requestNextActivityFile();
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;

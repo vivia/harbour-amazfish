@@ -445,11 +445,13 @@ void CommunicatorV2::onDownloadRequestStatus(quint8 status, quint8 downloadStatu
     }
     if (fileSize < 0 || fileSize > MAX_TRANSFER_BYTES) {
         qDebug() << Q_FUNC_INFO << "Garmin: implausible size" << fileSize;
+        mPendingActivities.clear();
         mFileTransferState = FileTransferState::Idle;
         return;
     }
     if (fileSize == 0) {
         qDebug() << Q_FUNC_INFO << "Garmin: watch reports an empty" << (forDirectory ? "directory" : "file");
+        mPendingActivities.clear();
         mFileTransferState = FileTransferState::Idle;
         return;
     }
@@ -475,6 +477,7 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
         qDebug() << Q_FUNC_INFO << "Garmin: chunk offset mismatch, expected" << mFileBytes.size()
                  << "got" << chunk.dataOffset;
         mFileOut.close();
+        mPendingActivities.clear();
         mFileTransferState = FileTransferState::Idle;
         mFileBytes.clear();
         return;
@@ -486,6 +489,7 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
                  << "computed" << QString::number(runningCrc, 16)
                  << "watch said" << QString::number(chunk.crc, 16);
         mFileOut.close();
+        mPendingActivities.clear();
         mFileTransferState = FileTransferState::Idle;
         mFileBytes.clear();
         return;
@@ -519,7 +523,7 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     if (wasDirectory) {
         logDirectoryEntries();
         mFileBytes.clear();
-        requestNewestActivityFile();
+        startActivityDownloads();
         return;
     }
     qDebug() << Q_FUNC_INFO << "Garmin: activity file" << mRequestedEntry.fileIndex
@@ -529,10 +533,11 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     QString fitError;
     if (parseGarminFitFile(mFileBytes, fitMessages, fitError)) {
         logGarminFitSummary(fitMessages, mFileBytes.size());
-        emit activityFileParsed(QString::number(mRequestedEntry.timestamp), fitMessages);
+        emit activityFileParsed(mRequestedEntry.timestamp, fitMessages);
     } else {
         qDebug() << Q_FUNC_INFO << "Garmin: cannot parse FIT file:" << fitError;
     }
+    requestNextActivityFile();
     mFileBytes.clear();
 }
 
@@ -582,28 +587,44 @@ void CommunicatorV2::logDirectoryEntries()
     }
 }
 
-void CommunicatorV2::requestNewestActivityFile()
+void CommunicatorV2::startActivityDownloads()
 {
-    // FIT activity files are type 128 subtype 4. The newest one is the only interesting file for
-    // a sync. The watch answers a download request with its own size, so ask with dataSize 0.
-    int best = -1;
-    for (int i = 0; i < mDirectory.size(); ++i) {
-        const DirectoryEntry& entry = mDirectory.at(i);
-        if (entry.dataType != DIR_TYPE_ACTIVITY || entry.subType != DIR_SUBTYPE_ACTIVITY
-            || entry.size <= 0) {
-            continue;
-        }
-        if (best < 0 || entry.timestamp > mDirectory.at(best).timestamp) {
-            best = i;
+    mPendingActivities.clear();
+    // FIT activity files are type 128 subtype 4. Only files newer than the last
+    // saved one are interesting. The config stamp is in seconds on the watch's
+    // own epoch, the same unit as the directory entry timestamp.
+    const qint32 lastStamp = AmazfishConfig::instance()->value("device/lastactivityfilestamp").toInt();
+    for (const DirectoryEntry& entry : mDirectory) {
+        if (entry.dataType == DIR_TYPE_ACTIVITY && entry.subType == DIR_SUBTYPE_ACTIVITY
+            && entry.size > 0 && entry.timestamp > lastStamp) {
+            mPendingActivities.append(entry);
         }
     }
-    if (best < 0) {
-        qDebug() << Q_FUNC_INFO << "Garmin: watch has no activity file to download";
+    if (mPendingActivities.isEmpty()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: watch has no new activity file to download";
         return;
     }
-    mRequestedEntry = mDirectory.at(best);
+    requestNextActivityFile();
+}
+
+void CommunicatorV2::requestNextActivityFile()
+{
+    if (mPendingActivities.isEmpty()) {
+        return;
+    }
+    // Oldest first. If the connection breaks mid-queue, the next attempt
+    // continues where this one stopped.
+    int oldest = 0;
+    for (int i = 1; i < mPendingActivities.size(); ++i) {
+        if (mPendingActivities.at(i).timestamp < mPendingActivities.at(oldest).timestamp) {
+            oldest = i;
+        }
+    }
+    mRequestedEntry = mPendingActivities.at(oldest);
+    mPendingActivities.removeAt(oldest);
     qDebug() << Q_FUNC_INFO << "Garmin: requesting activity file" << mRequestedEntry.fileIndex
-             << "size" << mRequestedEntry.size;
+             << "size" << mRequestedEntry.size << "," << mPendingActivities.size() << "to go";
+    // The watch answers a download request with its own size, so ask with dataSize 0.
     mFileTransferState = FileTransferState::WaitingFileStatus;
     sendMessage("DOWNLOAD REQUEST", GfdiMessageGenerator::downloadRequest(mRequestedEntry.fileIndex, 0));
 }
