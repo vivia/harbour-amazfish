@@ -129,6 +129,7 @@ set(SOURCES
 ./src/services/garmin/garminweathermessage.cpp
 ./src/services/garmin/fitweatherencoder.cpp
 ./src/services/garmin/garminfitreader.cpp
+./src/services/garmin/garminfitsummary.cpp
 ./src/services/garmin/garminfilterstatusmessage.cpp
 ./src/services/garmin/garminfiletransferdatamessage.cpp
 ./src/services/garmin/garminnotificationupdatemessage.cpp

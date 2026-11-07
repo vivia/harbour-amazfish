@@ -65,9 +65,10 @@ private:
     QDateTime m_startTime;     /** Not-null value. */
     QDateTime m_endTime;     /** Not-null value. */
     ActivityKind::Type m_activityKind;
-    float m_baseLongitude;
-    float m_baseLatitude;
-    int m_baseAltitude;
+    // Default 0 so activities without a position store no location.
+    float m_baseLongitude = 0;
+    float m_baseLatitude = 0;
+    int m_baseAltitude = 0;
     QString m_gpxTrack;
     uint m_deviceId;
     uint m_userId;
