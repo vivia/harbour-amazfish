@@ -1463,6 +1463,13 @@ void DeviceInterface::fetchData(int dataType)
     }
 }
 
+void DeviceInterface::rescanActivityFiles()
+{
+    if (m_device) {
+        m_device->rescanActivityFiles();
+    }
+}
+
 void DeviceInterface::requestScreenshot() {
     if (m_device) {
         m_device->requestScreenshot();

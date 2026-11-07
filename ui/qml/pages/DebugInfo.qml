@@ -322,6 +322,15 @@ PagePL {
         }
 
         ButtonPL {
+            text: qsTr("Rescan Activity Files")
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width * 0.8
+            onClicked: {
+                DaemonInterfaceInstance.rescanActivityFiles();
+            }
+        }
+
+        ButtonPL {
             text: qsTr("Request Screenshot")
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width * 0.8
