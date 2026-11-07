@@ -345,16 +345,12 @@ void GarminDevice::fetchData(Amazfish::DataTypes dataTypes)
     }
 }
 
-void GarminDevice::onActivityFileParsed(const QString& activityId, const QVector<GarminFitMessage>& messages)
+void GarminDevice::onActivityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages)
 {
-    const QString lastSyncId = AmazfishConfig::instance()->value("device/lastsportsyncid").toString();
-    if (!lastSyncId.isEmpty() && activityId == lastSyncId) {
-        qDebug() << Q_FUNC_INFO << "Garmin: activity" << activityId << "was synced already";
-        return;
-    }
-
+    // The communicator only queues files newer than the saved stamp. The stamp
+    // is in seconds on the watch's own epoch.
     if (saveActivityMessages(messages)) {
-        AmazfishConfig::instance()->setValue("device/lastsportsyncid", activityId);
+        AmazfishConfig::instance()->setValue("device/lastactivityfilestamp", fileStamp);
     }
 }
 
