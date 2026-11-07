@@ -12,6 +12,7 @@
 #include <QtCore/QTimer>
 
 #include <QtCore/QFile>
+#include <QtCore/QVector>
 
 #include "garmin/garmindevice.h"
 #include "garmintypes.h"
@@ -282,13 +283,14 @@ private:
     quint8 mSynchronizationType = 0;
     quint64 mFileTypeBitmask = 0;
 
-    // Classic GFDI file download. Only the root directory is fetched so far,
-    // so a RAM buffer is enough; per-file FIT downloads will need streaming.
-    // deviceGarminSaveDownloads keeps a copy of the raw bytes for re-parsing.
+    // Classic GFDI file download. Files are buffered in RAM, so a size cap keeps the transfer
+    // safe. deviceGarminSaveDownloads keeps a copy of the raw bytes for re-parsing.
     enum class FileTransferState {
         Idle,
         WaitingDirStatus,
-        ReceivingDir
+        ReceivingDir,
+        WaitingFileStatus,
+        ReceivingFile
     };
     FileTransferState mFileTransferState = FileTransferState::Idle;
     QByteArray mFileBytes;
@@ -296,10 +298,13 @@ private:
     quint16 mFileRunningCrc = 0;
     QFile mFileOut;
     QString mFileTransferPath;
+    QVector<DirectoryEntry> mDirectory;
+    DirectoryEntry mRequestedEntry;
 
     QString garminFileDir();
-    void openDebugFile();
+    void openDebugFile(const QString& name);
     void logDirectoryEntries();
+    void requestNewestActivityFile();
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;

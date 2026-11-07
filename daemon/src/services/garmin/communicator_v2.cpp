@@ -38,7 +38,11 @@ static const int WEATHER_ACK_TIMEOUT_MS = 5000;
 
 // Upper bound for one classic GFDI download. The root directory is all we ask
 // for so far; FIT files need their own bound when the per-file pull is added.
-static const qint32 MAX_DIRECTORY_BYTES = 1024 * 1024;
+static const qint32 MAX_TRANSFER_BYTES = 1024 * 1024;
+
+// Directory entry type and subtype of a FIT activity file.
+static const quint8 DIR_TYPE_ACTIVITY = 128;
+static const quint8 DIR_SUBTYPE_ACTIVITY = 4;
 
 // =============================================================================
 // CommunicatorV2
@@ -421,34 +425,40 @@ void CommunicatorV2::onFilterStatusReceived(const FilterStatusMessage& msg) {
 void CommunicatorV2::onDownloadRequestStatus(quint8 status, quint8 downloadStatus, qint32 fileSize)
 {
     qDebug() << Q_FUNC_INFO << "Garmin: download status" << status << downloadStatus << "size" << fileSize;
-    if (mFileTransferState != FileTransferState::WaitingDirStatus) {
+    const bool forDirectory = mFileTransferState == FileTransferState::WaitingDirStatus;
+    if (!forDirectory && mFileTransferState != FileTransferState::WaitingFileStatus) {
         return;
     }
     if (status != quint8(Status::Ack) || downloadStatus != 0) {
-        qDebug() << Q_FUNC_INFO << "Garmin: watch refused the directory download";
+        qDebug() << Q_FUNC_INFO << "Garmin: watch refused the download";
         mFileTransferState = FileTransferState::Idle;
         return;
     }
-    if (fileSize < 0 || fileSize > MAX_DIRECTORY_BYTES) {
-        qDebug() << Q_FUNC_INFO << "Garmin: implausible directory size" << fileSize;
+    if (fileSize < 0 || fileSize > MAX_TRANSFER_BYTES) {
+        qDebug() << Q_FUNC_INFO << "Garmin: implausible size" << fileSize;
         mFileTransferState = FileTransferState::Idle;
         return;
     }
     if (fileSize == 0) {
-        qDebug() << Q_FUNC_INFO << "Garmin: watch reports an empty directory";
+        qDebug() << Q_FUNC_INFO << "Garmin: watch reports an empty" << (forDirectory ? "directory" : "file");
         mFileTransferState = FileTransferState::Idle;
         return;
+    }
+    QString name = QStringLiteral("directory.bin");
+    if (!forDirectory) {
+        name = QStringLiteral("activity-%1-%2.fit").arg(mRequestedEntry.fileNumber).arg(mRequestedEntry.timestamp);
     }
     mFileBytes.clear();
     mFileExpectedSize = fileSize;
     mFileRunningCrc = 0;
-    openDebugFile();
-    mFileTransferState = FileTransferState::ReceivingDir;
+    openDebugFile(name);
+    mFileTransferState = forDirectory ? FileTransferState::ReceivingDir : FileTransferState::ReceivingFile;
 }
 
 void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chunk)
 {
-    if (mFileTransferState != FileTransferState::ReceivingDir) {
+    if (mFileTransferState != FileTransferState::ReceivingDir
+        && mFileTransferState != FileTransferState::ReceivingFile) {
         qDebug() << Q_FUNC_INFO << "Garmin: file chunk while not receiving, dropping";
         return;
     }
@@ -495,14 +505,23 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     if (!mFileTransferPath.isEmpty()) {
         qDebug() << Q_FUNC_INFO << "Garmin: saved" << mFileBytes.size() << "bytes to" << mFileTransferPath;
     }
-    logDirectoryEntries();
+    const bool wasDirectory = mFileTransferState == FileTransferState::ReceivingDir;
     mFileTransferState = FileTransferState::Idle;
+    if (wasDirectory) {
+        logDirectoryEntries();
+        mFileBytes.clear();
+        requestNewestActivityFile();
+        return;
+    }
+    qDebug() << Q_FUNC_INFO << "Garmin: activity file" << mRequestedEntry.fileIndex
+             << (mFileBytes.mid(8, 4) == QByteArrayLiteral(".FIT") ? "starts with .FIT"
+                                                                   : "has no .FIT magic");
     mFileBytes.clear();
 }
 
 QString CommunicatorV2::garminFileDir()
 {
-    QDir dir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/garmin");
+    QDir dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/garmin");
     if (!dir.exists() && !dir.mkpath(".")) {
         qDebug() << Q_FUNC_INFO << "Garmin: cannot create" << dir.path();
         return QString();
@@ -510,7 +529,7 @@ QString CommunicatorV2::garminFileDir()
     return dir.path();
 }
 
-void CommunicatorV2::openDebugFile()
+void CommunicatorV2::openDebugFile(const QString& name)
 {
     mFileTransferPath.clear();
     if (!AmazfishConfig::instance()->deviceGarminSaveDownloads()) {
@@ -520,7 +539,7 @@ void CommunicatorV2::openDebugFile()
     if (dir.isEmpty()) {
         return;
     }
-    mFileTransferPath = dir + "/directory.bin";
+    mFileTransferPath = dir + "/" + name;
     mFileOut.setFileName(mFileTransferPath);
     if (!mFileOut.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         qDebug() << Q_FUNC_INFO << "Garmin: cannot write" << mFileTransferPath << mFileOut.errorString();
@@ -533,24 +552,43 @@ void CommunicatorV2::logDirectoryEntries()
     if (mFileBytes.size() % 16 != 0) {
         qDebug() << Q_FUNC_INFO << "Garmin: directory size" << mFileBytes.size() << "is not a multiple of 16";
     }
-    for (int off = 0; off + 16 <= mFileBytes.size(); off += 16) {
-        const quint16 fileIndex = u16le(mFileBytes, off);
-        const quint8 dataType = u8le(mFileBytes, off + 2);
-        const quint8 subType = u8le(mFileBytes, off + 3);
-        const quint16 fileNumber = u16le(mFileBytes, off + 4);
-        const qint32 fileSize = i32le(mFileBytes, off + 8);
-        const qint32 timestamp = i32le(mFileBytes, off + 12);
-        if (fileIndex == 0 && dataType == 0 && subType == 0 && fileNumber == 0 && fileSize == 0
-            && timestamp == 0) {
-            continue; // all-zero padding entry
-        }
-        const QString date = timestamp == 0
+    mDirectory = parseDirectoryEntries(mFileBytes);
+    for (const DirectoryEntry& entry : mDirectory) {
+        const QString date = entry.timestamp == 0
             ? QStringLiteral("none")
-            : QDateTime::fromMSecsSinceEpoch((qint64(timestamp) + GARMIN_TIME_OFFSET) * 1000)
+            : QDateTime::fromMSecsSinceEpoch((qint64(entry.timestamp) + GARMIN_TIME_OFFSET) * 1000)
                   .toString(Qt::ISODate);
-        qDebug() << Q_FUNC_INFO << "Garmin: dir entry" << fileIndex << "type" << dataType << "subtype"
-                 << subType << "number" << fileNumber << "size" << fileSize << "date" << date;
+        qDebug() << Q_FUNC_INFO << "Garmin: dir entry" << entry.fileIndex << "type" << entry.dataType
+                 << "subtype" << entry.subType << "number" << entry.fileNumber << "flags"
+                 << QString::number(entry.specificFlags, 16) << QString::number(entry.fileFlags, 16)
+                 << "size" << entry.size << "date" << date;
     }
+}
+
+void CommunicatorV2::requestNewestActivityFile()
+{
+    // FIT activity files are type 128 subtype 4. The newest one is the only interesting file for
+    // a sync. The watch answers a download request with its own size, so ask with dataSize 0.
+    int best = -1;
+    for (int i = 0; i < mDirectory.size(); ++i) {
+        const DirectoryEntry& entry = mDirectory.at(i);
+        if (entry.dataType != DIR_TYPE_ACTIVITY || entry.subType != DIR_SUBTYPE_ACTIVITY
+            || entry.size <= 0) {
+            continue;
+        }
+        if (best < 0 || entry.timestamp > mDirectory.at(best).timestamp) {
+            best = i;
+        }
+    }
+    if (best < 0) {
+        qDebug() << Q_FUNC_INFO << "Garmin: watch has no activity file to download";
+        return;
+    }
+    mRequestedEntry = mDirectory.at(best);
+    qDebug() << Q_FUNC_INFO << "Garmin: requesting activity file" << mRequestedEntry.fileIndex
+             << "size" << mRequestedEntry.size;
+    mFileTransferState = FileTransferState::WaitingFileStatus;
+    sendMessage("DOWNLOAD REQUEST", GfdiMessageGenerator::downloadRequest(mRequestedEntry.fileIndex, 0));
 }
 
 void CommunicatorV2::onWeatherRequestReceived(const WeatherRequestMessage& msg) {

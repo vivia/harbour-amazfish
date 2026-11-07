@@ -298,6 +298,28 @@ void overwriteU64le(QByteArray& out, int off, quint64 v) {
     out[off+6] = char((v >> 56) & 0xFF);
 }
 
+QVector<DirectoryEntry> parseDirectoryEntries(const QByteArray& listing)
+{
+    QVector<DirectoryEntry> entries;
+    for (int off = 0; off + 16 <= listing.size(); off += 16) {
+        DirectoryEntry entry;
+        entry.fileIndex = u16le(listing, off);
+        entry.dataType = u8le(listing, off + 2);
+        entry.subType = u8le(listing, off + 3);
+        entry.fileNumber = u16le(listing, off + 4);
+        entry.specificFlags = u8le(listing, off + 6);
+        entry.fileFlags = u8le(listing, off + 7);
+        entry.size = i32le(listing, off + 8);
+        entry.timestamp = i32le(listing, off + 12);
+        if (entry.fileIndex == 0 && entry.dataType == 0 && entry.subType == 0 && entry.fileNumber == 0
+            && entry.specificFlags == 0 && entry.fileFlags == 0 && entry.size == 0 && entry.timestamp == 0) {
+            continue;
+        }
+        entries.append(entry);
+    }
+    return entries;
+}
+
 void writeTemperatureC(QByteArray& out, int celsius)
 {
     // 0x7F is the FIT invalid value for SINT8. A value outside a credible

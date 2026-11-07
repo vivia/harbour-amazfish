@@ -7,6 +7,7 @@
 #include <QtCore/QtGlobal>
 
 #include <QtCore/QObject>
+#include <QtCore/QVector>
 
 #include <optional>
 #include <utility>
@@ -365,6 +366,19 @@ struct FileTransferDataChunk {
     QByteArray bytes;
 };
 
+// One entry of a directory listing: 16 bytes, little endian
+
+struct DirectoryEntry {
+    quint16 fileIndex {};
+    quint8 dataType {};
+    quint8 subType {};
+    quint16 fileNumber {};
+    quint8 specificFlags {};
+    quint8 fileFlags {};
+    qint32 size {};
+    qint32 timestamp {};
+};
+
 // Weather Request Message (5014)
 
 struct WeatherRequestMessage {
@@ -447,6 +461,10 @@ void writeU64le(QByteArray& out, quint64 v);
 void overwriteU16le(QByteArray& out, int off, quint16 v);
 void overwriteU32le(QByteArray& out, int off, quint32 v);
 void overwriteU64le(QByteArray& out, int off, quint64 v);
+
+// Split a directory listing into entries. An entry whose fields are all zero is padding and is
+// dropped. The timestamp is the raw watch value; 0 means the watch sent no date.
+QVector<DirectoryEntry> parseDirectoryEntries(const QByteArray& listing);
 
 // FIT value writers. They encode a value for one FIT field, so they also apply
 // the FIT invalid value when the input is out of range or unknown.
