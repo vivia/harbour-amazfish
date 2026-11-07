@@ -27,6 +27,7 @@ public:
     bool isPairing() {return m_pairing;};
     void sendAlert(const Amazfish::WatchNotification &notification) override;
     void sendWeather(CurrentWeather* weather) override;
+    void fetchData(Amazfish::DataTypes dataTypes) override;
     void incomingCall(const QString &caller) override;
     void incomingCallEnded() override;
     void setMusicStatus(bool playing, const QString& title, const QString& artist, const QString& album, int duration = 0, int position = 0) override;
