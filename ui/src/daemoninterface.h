@@ -43,6 +43,7 @@ public:
     Q_INVOKABLE QString prepareFirmwareDownload(const QString &path);
     Q_INVOKABLE bool startDownload();
     Q_INVOKABLE void fetchData(int dataTypes);
+    Q_INVOKABLE void rescanActivityFiles();
     Q_INVOKABLE void refreshInformation();
     Q_INVOKABLE QString information(Amazfish::Info i);
     Q_INVOKABLE void sendAlert(const int notificationId, const QString &appId, const QString &appName, const QString &summary, const QString &body, bool allowDuplicate = false);

@@ -147,6 +147,11 @@ void AbstractDevice::fetchData(Amazfish::DataTypes dataTypes)
     Q_UNUSED(dataTypes);
 }
 
+void AbstractDevice::rescanActivityFiles()
+{
+    qDebug() << Q_FUNC_INFO << deviceType() << "does not support rescanning activity files";
+}
+
 void AbstractDevice::sendWeather(CurrentWeather *weather)
 {
     Q_UNUSED(weather);
