@@ -408,18 +408,26 @@ void CommunicatorV2::onSynchronizationReceived(const SynchronizationMessage& msg
              << hex << msg.fileTypeBitmask;
 }
 
+bool CommunicatorV2::requestDirectoryListing()
+{
+    if (mFileTransferState != FileTransferState::Idle) {
+        qDebug() << Q_FUNC_INFO << "Garmin: a file transfer is already running, ignoring the request";
+        return false;
+    }
+    // The root directory is fileIndex 0. The watch answers with the size it wants to send.
+    mFileTransferState = FileTransferState::WaitingDirStatus;
+    sendMessage("DOWNLOAD REQUEST", GfdiMessageGenerator::downloadRequest(0, 0));
+    return true;
+}
+
 void CommunicatorV2::onFilterStatusReceived(const FilterStatusMessage& msg) {
     qDebug() << Q_FUNC_INFO << "Garmin: filter status" << static_cast<int>(msg.status)
              << "filter type" << msg.filterType;
     if (msg.status != Status::Ack) {
         return;
     }
-    if (mFileTransferState != FileTransferState::Idle) {
-        return;
-    }
-    // The filter was accepted: ask for the root directory, fileIndex 0.
-    mFileTransferState = FileTransferState::WaitingDirStatus;
-    sendMessage("DOWNLOAD REQUEST", GfdiMessageGenerator::downloadRequest(0, 0));
+    // The filter was accepted: ask for the root directory.
+    requestDirectoryListing();
 }
 
 void CommunicatorV2::onDownloadRequestStatus(quint8 status, quint8 downloadStatus, qint32 fileSize)

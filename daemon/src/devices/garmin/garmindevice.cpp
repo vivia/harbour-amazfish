@@ -42,10 +42,9 @@ Amazfish::Features GarminDevice::supportedFeatures() const
 Amazfish::DataTypes GarminDevice::supportedDataTypes() const
 {
     return Amazfish::DataType::TYPE_SPO2
-            | Amazfish::DataType::TYPE_HRV
-            | Amazfish::DataType::TYPE_HEART_RATE
-            ;
-
+        | Amazfish::DataType::TYPE_HRV
+        | Amazfish::DataType::TYPE_HEART_RATE
+        | Amazfish::DataType::TYPE_ACTIVITY;
 }
 
 QString GarminDevice::deviceType() const
@@ -320,6 +319,17 @@ void GarminDevice::sendWeatherToWatch()
     }
     const FitWeatherFrames frames = GarminWeatherMessage::encodeWeather(mWeather);
     mCommunicator->sendWeatherFrames(frames.fitDefinition, frames.fitData);
+}
+
+void GarminDevice::fetchData(Amazfish::DataTypes dataTypes)
+{
+    if (!(dataTypes & Amazfish::DataType::TYPE_ACTIVITY) || !mCommunicator) {
+        return;
+    }
+    // The watch answers with a file list; the newest activity is what we want from it.
+    if (!mCommunicator->requestDirectoryListing()) {
+        emit message(tr("An operation is currently running, please try later"));
+    }
 }
 
 void GarminDevice::refreshInformation()

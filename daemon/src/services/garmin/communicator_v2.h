@@ -135,6 +135,11 @@ public:
     // Reports the watch's answer to a FIT message we sent.
     void onFitStatusReceived(MessageId messageId, quint8 status, quint8 subStatus);
 
+    // Ask the watch for its root directory. Everything else in a file transfer follows from the
+    // listing, so this is also where a phone-initiated fetch starts.
+    // Returns false when a file transfer is already running.
+    bool requestDirectoryListing();
+
     //  register_service / close_service
     void registerService(Service service, bool reliable);
     void closeService(Service service);
