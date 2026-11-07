@@ -67,6 +67,7 @@ public:
     virtual void startDownload();
 
     virtual void fetchData(Amazfish::DataTypes dataTypes);
+    virtual void rescanActivityFiles();
     virtual void sendWeather(CurrentWeather *weather);
     virtual void refreshInformation();
     virtual QString information(Amazfish::Info i) const;

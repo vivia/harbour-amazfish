@@ -140,6 +140,9 @@ public:
     // listing, so this is also where a phone-initiated fetch starts.
     // Returns false when a file transfer is already running.
     bool requestDirectoryListing();
+    // Directory that debug downloads are saved to. Public so the device can
+    // rescan the files it kept.
+    QString garminFileDir();
 
     //  register_service / close_service
     void registerService(Service service, bool reliable);
@@ -310,7 +313,6 @@ private:
     QVector<DirectoryEntry> mDirectory;
     DirectoryEntry mRequestedEntry;
 
-    QString garminFileDir();
     void openDebugFile(const QString& name);
     void logDirectoryEntries();
     void requestNewestActivityFile();

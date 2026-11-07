@@ -203,6 +203,14 @@ void DaemonInterface::fetchData(int dataTypes)
     iface->call(QStringLiteral("fetchData"), dataTypes);
 }
 
+void DaemonInterface::rescanActivityFiles()
+{
+    if (!iface || !iface->isValid()) {
+        return;
+    }
+    iface->call(QStringLiteral("rescanActivityFiles"));
+}
+
 void DaemonInterface::refreshInformation()
 {
     if (!iface || !iface->isValid()) {

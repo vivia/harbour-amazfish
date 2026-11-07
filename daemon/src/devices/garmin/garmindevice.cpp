@@ -10,10 +10,12 @@
 #include "services/garmin/garminfitgpx.h"
 #include "services/garmin/garminfitsummary.h"
 
+#include <KDb.h>
 #include <QDomDocument>
 #include <QStringList>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -351,20 +353,43 @@ void GarminDevice::onActivityFileParsed(const QString& activityId, const QVector
         return;
     }
 
+    if (saveActivityMessages(messages)) {
+        AmazfishConfig::instance()->setValue("device/lastsportsyncid", activityId);
+    }
+}
+
+bool GarminDevice::saveActivityMessages(const QVector<GarminFitMessage>& messages)
+{
     if (!m_conn || !m_conn->isDatabaseUsed()) {
         qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
-        return;
+        return false;
     }
 
     ActivitySummary summary;
     if (!buildGarminFitSummary(messages, summary)) {
         qDebug() << Q_FUNC_INFO << "Garmin: no session in the activity file, not saving";
-        return;
+        return false;
     }
 
     auto config = AmazfishConfig::instance();
     summary.setProfileId(qHash(config->profileName()));
     summary.setDeviceId(qHash(config->pairedAddress()));
+
+    // A rescan replaces the row for the same activity, because the new parse
+    // may know more than the old one. The name is derived from the file
+    // contents, so it identifies the activity across rescans.
+    int oldId = 0;
+    // escapeString() adds the SQL quotes around the name. arg(QString) does not,
+    // so without it SQLite reads the name as an identifier and finds nothing.
+    const KDbEscapedString escapedName = m_conn->escapeString(summary.name());
+    const auto foundOld = m_conn->querySingleNumber(
+        KDbEscapedString("SELECT id FROM sports_data WHERE name = %1").arg(escapedName), &oldId);
+    if (foundOld == true) {
+        m_conn->executeSql(KDbEscapedString("DELETE FROM sports_meta WHERE sport_id = %1").arg(oldId));
+        m_conn->executeSql(KDbEscapedString("DELETE FROM sports_data WHERE id = %1").arg(oldId));
+    } else if (foundOld == false) {
+        qWarning() << Q_FUNC_INFO << "Garmin: cannot look up the stored row for" << summary.name();
+    }
 
     QDir laufhelden(QDir::homePath() + "/Laufhelden/");
     const QString gpxDir = laufhelden.exists() ? laufhelden.absolutePath()
@@ -380,11 +405,51 @@ void GarminDevice::onActivityFileParsed(const QString& activityId, const QVector
     }
 
     if (summary.saveToDatabase(m_conn)) {
-        AmazfishConfig::instance()->setValue("device/lastsportsyncid", activityId);
         qDebug() << Q_FUNC_INFO << "Garmin: saved activity" << summary.name();
-    } else {
-        qDebug() << Q_FUNC_INFO << "Garmin: could not save activity" << summary.name();
+        return true;
     }
+    qDebug() << Q_FUNC_INFO << "Garmin: could not save activity" << summary.name();
+    return false;
+}
+
+void GarminDevice::rescanActivityFiles()
+{
+    if (!mCommunicator) {
+        qDebug() << Q_FUNC_INFO << "Garmin: no communicator, nothing to rescan";
+        return;
+    }
+
+    const QString dir = mCommunicator->garminFileDir();
+    if (dir.isEmpty()) {
+        return;
+    }
+
+    int scanned = 0;
+    int saved = 0;
+    QDirIterator it(dir, QStringList() << QStringLiteral("*.fit"), QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        QFile file(it.filePath());
+        if (!file.open(QIODevice::ReadOnly)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: cannot read" << it.filePath();
+            continue;
+        }
+        const QByteArray bytes = file.readAll();
+        file.close();
+
+        QString error;
+        QVector<GarminFitMessage> messages;
+        if (!parseGarminFitFile(bytes, messages, error)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: cannot parse" << it.filePath() << error;
+            continue;
+        }
+        ++scanned;
+        if (saveActivityMessages(messages)) {
+            ++saved;
+        }
+    }
+    qDebug() << Q_FUNC_INFO << "Garmin: rescanned" << dir << ":" << saved << "of" << scanned << "files saved";
+    emit message(tr("Rescanned activity files: %1 of %2 saved").arg(saved).arg(scanned));
 }
 
 void GarminDevice::refreshInformation()
