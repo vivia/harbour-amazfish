@@ -39,6 +39,7 @@ Item {
     property real lastValue: 0.0
     property real lastY: 0.0
     property real lastZ: 0.0
+    property real lastW: 0.0
 
     property var valueConverter
     property bool valueTotal: false
@@ -320,6 +321,17 @@ Item {
                                 ctx.beginPath();
                                 ctx.moveTo(x, z);
                                 ctx.lineTo(x, y);
+
+                                if (typeof points[i].w !== 'undefined') {
+                                    var w = height - Math.floor((points[i].w + points[i].z + points[i].y) / stepY) - 1;
+                                    lastW = points[i].w;
+
+                                    ctx.stroke();
+                                    ctx.strokeStyle = styler.themeTertiaryHighlightColor;
+                                    ctx.beginPath();
+                                    ctx.moveTo(x, w);
+                                    ctx.lineTo(x, z);
+                                }
                                 ctx.stroke();
                                 ctx.strokeStyle = lineColor;
                                 ctx.beginPath();
@@ -340,6 +352,9 @@ Item {
                             lastValue = points[end-1].y;
                             if (typeof points[end-1].z !== 'undefined') {
                                 lastValue += points[end-1].z
+                            }
+                            if (typeof points[end-1].w !== 'undefined') {
+                                lastValue += points[end-1].w
                             }
                         }
                         if (lastValue) {

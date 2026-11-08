@@ -42,8 +42,10 @@ private:
         QDateTime sleepEnd;
         long lightSleepDuration;
         long deepSleepDuration;
+        long remSleepDuration = 0;
     };
     QList<SleepSession> calculateSleep(const QDate &day);
+    bool calculateSleepStages(const QDate& day, SleepSession& session);
     bool isSleep(int kind);
 };
 

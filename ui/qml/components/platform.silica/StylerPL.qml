@@ -46,6 +46,7 @@ QtObject {
     property color themeSecondaryColor: Theme.secondaryColor
     // descriptive items, secondary
     property color themeSecondaryHighlightColor: Theme.secondaryHighlightColor
+    property color themeTertiaryHighlightColor: Qt.darker(Theme.secondaryHighlightColor, 2)
 
     // button sizes
     property real themeButtonWidthLarge: Theme.buttonWidthLarge
