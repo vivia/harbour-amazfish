@@ -311,13 +311,25 @@ private:
     QFile mFileOut;
     QString mFileTransferPath;
     QVector<DirectoryEntry> mDirectory;
-    QVector<DirectoryEntry> mPendingActivities;
+    // One queue per file category on the watch. A category is one directory
+    // type and subtype, with its own config stamp for the last saved file.
+    struct FileCategory {
+        quint8 dataType;
+        quint8 subType;
+        const char* name; // used in logs and debug file names
+        const char* stampKey;
+        QVector<DirectoryEntry> pending;
+    };
+    QVector<FileCategory> mFileCategories;
     DirectoryEntry mRequestedEntry;
+    int mRequestedCategory = -1;
 
     void openDebugFile(const QString& name);
     void logDirectoryEntries();
-    void startActivityDownloads();
-    void requestNextActivityFile();
+    const char* categoryName(int index) const;
+    void clearPendingFiles();
+    void startFileDownloads();
+    void requestNextFile();
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;
