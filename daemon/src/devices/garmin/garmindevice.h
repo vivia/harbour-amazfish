@@ -3,6 +3,7 @@
 
 #include "abstractdevice.h"
 #include "services/garmin/communicator_v2.h"
+#include "services/garmin/garminfithrv.h"
 #include "services/garmin/garminfitreader.h"
 #include "services/garmin/garminfitsleep.h"
 #include "services/garmin/garminnotificationhandler.h"
@@ -62,6 +63,8 @@ private:
     bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
     bool saveSleepMessages(const QVector<GarminFitMessage>& messages);
     bool saveSleepData(const QVector<GarminSleepSample>& samples, const QDateTime& assessmentStart, int score);
+    bool saveHrvMessages(const QVector<GarminFitMessage>& messages);
+    bool saveHrvData(const QVector<GarminHrvSample>& samples);
     virtual void refreshInformation() override;
 
     QString mPreferredService;

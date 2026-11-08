@@ -370,6 +370,21 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
         }
         return;
     }
+    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_HRV) {
+        QVector<GarminHrvSample> samples;
+        buildGarminHrvSamples(messages, samples);
+        if (samples.isEmpty()) {
+            // A file with no 5 minute values: nothing to store, but the file
+            // is done with. Advance the stamp so it is not fetched again.
+            qDebug() << Q_FUNC_INFO << "Garmin: hrv file has no values, skipping";
+            AmazfishConfig::instance()->setValue(STAMP_HRV, stamp);
+            return;
+        }
+        if (saveHrvData(samples)) {
+            AmazfishConfig::instance()->setValue(STAMP_HRV, stamp);
+        }
+        return;
+    }
     if (saveActivityMessages(messages)) {
         AmazfishConfig::instance()->setValue(STAMP_ACTIVITY, stamp);
     }
@@ -517,6 +532,62 @@ bool GarminDevice::saveSleepData(const QVector<GarminSleepSample>& samples, cons
     return true;
 }
 
+bool GarminDevice::saveHrvMessages(const QVector<GarminFitMessage>& messages)
+{
+    QVector<GarminHrvSample> samples;
+    if (!buildGarminHrvSamples(messages, samples)) {
+        return false;
+    }
+    return saveHrvData(samples);
+}
+
+bool GarminDevice::saveHrvData(const QVector<GarminHrvSample>& samples)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+    if (samples.isEmpty()) {
+        return false;
+    }
+
+    auto hrvTable = m_conn->tableSchema("hrv");
+    if (!hrvTable) {
+        qDebug() << Q_FUNC_INFO << "Garmin: hrv table missing";
+        return false;
+    }
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    KDbFieldList fields;
+    fields.addField(hrvTable->field("hrv_timestamp"));
+    fields.addField(hrvTable->field("hrv_timestamp_dt"));
+    fields.addField(hrvTable->field("hrv_value"));
+
+    for (const GarminHrvSample& sample : samples) {
+        const qint64 stamp = sample.timestamp.toMSecsSinceEpoch() / 1000;
+        // A rescan parses the file again. The value belongs to its timestamp,
+        // so the old row for it is replaced, not duplicated.
+        if (!m_conn->executeSql(KDbEscapedString("DELETE FROM hrv WHERE hrv_timestamp = %1").arg(stamp))) {
+            qDebug() << Q_FUNC_INFO << "Garmin: could not replace hrv value at" << stamp;
+            return false;
+        }
+        QList<QVariant> values;
+        values << stamp;
+        values << sample.timestamp;
+        values << sample.valueMs;
+        if (!m_conn->insertRecord(&fields, values)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: error inserting hrv value";
+            return false;
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "hrv values";
+    return true;
+}
+
 void GarminDevice::rescanActivityFiles()
 {
     if (!mCommunicator) {
@@ -549,10 +620,12 @@ void GarminDevice::rescanActivityFiles()
             continue;
         }
         ++scanned;
-        // Sleep files hold no session, so the activity save refuses them.
+        // Sleep and HRV files hold no session, so the activity save refuses them.
         if (saveActivityMessages(messages)) {
             ++saved;
         } else if (saveSleepMessages(messages)) {
+            ++saved;
+        } else if (saveHrvMessages(messages)) {
             ++saved;
         }
     }
