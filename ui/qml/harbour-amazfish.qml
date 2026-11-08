@@ -36,7 +36,7 @@ ApplicationWindowPL
     //Device Informatino
     property int _InfoSteps: 0
     property int _InfoBatteryPercent: 0
-    property int _InfoHeartrate: 0
+    property var _InfoHeartrate: 0
     property int _InfoSpo2: 0
 
     StylerPL {
@@ -198,7 +198,8 @@ ApplicationWindowPL
                 _InfoBatteryPercent = parseInt(infoValue, 10) || 0;
                 break;
             case Amazfish.INFO_HEARTRATE:
-                _InfoHeartrate = parseInt(infoValue, 10) || 0;
+                // 255 means the watch reads no pulse, e.g. it is not worn.
+                _InfoHeartrate = parseInt(infoValue, 10) == 255 ? "--" : parseInt(infoValue, 10) || 0;
                 break;
             case Amazfish.INFO_STEPS:
                 _InfoSteps = parseInt(infoValue, 10) || 0;

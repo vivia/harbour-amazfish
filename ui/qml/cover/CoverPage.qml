@@ -165,7 +165,8 @@ CoverBackground {
                 lblBattery.text = infoValue
                 break;
             case Amazfish.INFO_HEARTRATE:
-                lblHeartrate.text = infoValue
+                // 255 means the watch reads no pulse, e.g. it is not worn.
+                lblHeartrate.text = parseInt(infoValue, 10) == 255 ? "--" : infoValue
                 break;
             case Amazfish.INFO_STEPS:
                 stepCount = parseInt(infoValue, 10) || 0;
