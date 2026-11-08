@@ -38,17 +38,19 @@ static constexpr const char* BASE_UUID_FORMAT = "6A4E%04X-667B-11E3-949A-0800200
 static constexpr quint64 AMAZFISH_CLIENT_ID = 2;
 
 // Directory entry type and subtype of the file categories this service
-// downloads. FIT activities, sleep files and HRV status files are all in
-// directory type 128.
+// downloads. FIT activities, sleep files, HRV status files and monitoring
+// files are all in directory type 128.
 const quint8 DIR_TYPE_FIT = 128;
 const quint8 DIR_SUBTYPE_ACTIVITY = 4;
 const quint8 DIR_SUBTYPE_SLEEP = 49;
 const quint8 DIR_SUBTYPE_HRV = 68;
+const quint8 DIR_SUBTYPE_MONITOR = 32;
 // Config keys of the saved stamp per category, in seconds on the watch's own
 // epoch. Written by GarminDevice::onFileParsed() after a file was processed.
 extern const char* STAMP_ACTIVITY;
 extern const char* STAMP_SLEEP;
 extern const char* STAMP_HRV;
+extern const char* STAMP_MONITOR;
 struct deviceInfo {
 
     QString softwareRevision;

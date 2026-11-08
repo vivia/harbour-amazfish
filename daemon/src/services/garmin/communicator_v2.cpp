@@ -44,6 +44,7 @@ static const qint32 MAX_TRANSFER_BYTES = 1024 * 1024;
 const char* STAMP_ACTIVITY = "device/lastactivityfilestamp";
 const char* STAMP_SLEEP = "device/lastsleepfilestamp";
 const char* STAMP_HRV = "device/lasthrvfilestamp";
+const char* STAMP_MONITOR = "device/lastmonitorfilestamp";
 
 // =============================================================================
 // CommunicatorV2
@@ -65,6 +66,7 @@ CommunicatorV2::CommunicatorV2(const QString &path, QObject* parent)
     mFileCategories.append(FileCategory { DIR_TYPE_FIT, DIR_SUBTYPE_ACTIVITY, "activity", STAMP_ACTIVITY, {} });
     mFileCategories.append(FileCategory { DIR_TYPE_FIT, DIR_SUBTYPE_SLEEP, "sleep", STAMP_SLEEP, {} });
     mFileCategories.append(FileCategory { DIR_TYPE_FIT, DIR_SUBTYPE_HRV, "hrv", STAMP_HRV, {} });
+    mFileCategories.append(FileCategory { DIR_TYPE_FIT, DIR_SUBTYPE_MONITOR, "monitor", STAMP_MONITOR, {} });
 
     onConnectionStateChange(true);
 }

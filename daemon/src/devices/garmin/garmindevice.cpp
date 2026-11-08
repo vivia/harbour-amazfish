@@ -8,6 +8,7 @@
 
 #include "activitysummary.h"
 #include "services/garmin/garminfitgpx.h"
+#include "services/garmin/garminfitmonitor.h"
 #include "services/garmin/garminfitsleep.h"
 #include "services/garmin/garminfitsummary.h"
 
@@ -385,6 +386,21 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
         }
         return;
     }
+    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_MONITOR) {
+        QVector<GarminMonitorSample> samples;
+        buildGarminMonitorSamples(messages, samples);
+        if (samples.isEmpty()) {
+            // A file with no heart rate and no step movement: nothing to
+            // store, but the file is done with. Advance the stamp.
+            qDebug() << Q_FUNC_INFO << "Garmin: monitor file has no samples, skipping";
+            AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
+            return;
+        }
+        if (saveMonitorData(samples)) {
+            AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
+        }
+        return;
+    }
     if (saveActivityMessages(messages)) {
         AmazfishConfig::instance()->setValue(STAMP_ACTIVITY, stamp);
     }
@@ -588,6 +604,84 @@ bool GarminDevice::saveHrvData(const QVector<GarminHrvSample>& samples)
     return true;
 }
 
+bool GarminDevice::saveMonitorMessages(const QVector<GarminFitMessage>& messages)
+{
+    QVector<GarminMonitorSample> samples;
+    if (!buildGarminMonitorSamples(messages, samples)) {
+        return false;
+    }
+    return saveMonitorData(samples);
+}
+
+bool GarminDevice::saveMonitorData(const QVector<GarminMonitorSample>& samples)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+    if (samples.isEmpty()) {
+        return false;
+    }
+
+    auto activityTable = m_conn->tableSchema("mi_band_activity");
+    if (!activityTable) {
+        qDebug() << Q_FUNC_INFO << "Garmin: mi_band_activity table missing";
+        return false;
+    }
+
+    auto config = AmazfishConfig::instance();
+    const uint deviceId = qHash(config->pairedAddress());
+    const uint userId = qHash(config->profileName());
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    for (const GarminMonitorSample& sample : samples) {
+        const qint64 stamp = sample.timestamp.toMSecsSinceEpoch() / 1000;
+        // A rescan parses the file again. The sample belongs to its timestamp,
+        // so the old row is replaced, not duplicated. Only the rows of this
+        // device: another watch can have a sample at the same second.
+        if (!m_conn->executeSql(KDbEscapedString("DELETE FROM mi_band_activity WHERE timestamp = %1 AND device_id = %2")
+                                    .arg(stamp)
+                                    .arg(deviceId))) {
+            qDebug() << Q_FUNC_INFO << "Garmin: could not replace monitor sample at" << stamp;
+            return false;
+        }
+        // A sample carries heart rate, steps, or both. Fields left out of the
+        // list stay NULL in the row.
+        KDbFieldList fields;
+        fields.addField(activityTable->field("timestamp"));
+        fields.addField(activityTable->field("timestamp_dt"));
+        fields.addField(activityTable->field("device_id"));
+        fields.addField(activityTable->field("user_id"));
+        if (sample.heartrate >= 0) {
+            fields.addField(activityTable->field("heartrate"));
+        }
+        if (sample.steps >= 0) {
+            fields.addField(activityTable->field("steps"));
+        }
+        QList<QVariant> values;
+        values << stamp;
+        values << sample.timestamp;
+        values << deviceId;
+        values << userId;
+        if (sample.heartrate >= 0) {
+            values << sample.heartrate;
+        }
+        if (sample.steps >= 0) {
+            values << sample.steps;
+        }
+        if (!m_conn->insertRecord(&fields, values)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: error inserting monitor sample";
+            return false;
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "monitor samples";
+    return true;
+}
+
 void GarminDevice::rescanActivityFiles()
 {
     if (!mCommunicator) {
@@ -626,6 +720,8 @@ void GarminDevice::rescanActivityFiles()
         } else if (saveSleepMessages(messages)) {
             ++saved;
         } else if (saveHrvMessages(messages)) {
+            ++saved;
+        } else if (saveMonitorMessages(messages)) {
             ++saved;
         }
     }
