@@ -289,6 +289,8 @@ Item {
                     if (!timeSeries && graphType == line) {
                         x = -stepX;
                     }
+                    var prevX = 0;
+                    var prevY = 0;
 
                     var valueSum = 0;
                     for (var i = 0; i < end; i++) {
@@ -302,9 +304,13 @@ Item {
 
                         var y = height - Math.floor((points[i].y - minY) / stepY) - 1;
                         if (graphType == line) {
+                            //Stroke one segment per point. Strokes on an
+                            //accumulated path would get quadratic.
+                            ctx.beginPath();
                             if (i === 0) {
                                 ctx.moveTo(x, y);
                             } else {
+                                ctx.moveTo(prevX, prevY);
                                 ctx.lineTo(x, y);
                             }
                         } else if (graphType == bar) {
@@ -341,6 +347,8 @@ Item {
                         if (!timeSeries) {
                             x+=stepX; //point[i].x can be used for grid title
                         }
+                        prevX = x;
+                        prevY = y;
                         ctx.stroke();
                     }
 
