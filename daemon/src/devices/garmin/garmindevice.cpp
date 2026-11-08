@@ -8,6 +8,7 @@
 
 #include "activitysummary.h"
 #include "services/garmin/garminfitgpx.h"
+#include "services/garmin/garminfitsleep.h"
 #include "services/garmin/garminfitsummary.h"
 
 #include <KDb.h>
@@ -408,6 +409,86 @@ bool GarminDevice::saveActivityMessages(const QVector<GarminFitMessage>& message
     return false;
 }
 
+bool GarminDevice::saveSleepMessages(const QVector<GarminFitMessage>& messages)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+
+    QVector<GarminSleepSample> samples;
+    const bool hasSamples = buildGarminSleepSamples(messages, samples);
+
+    QDateTime assessmentStart;
+    int score = 0;
+    const bool hasAssessment = buildGarminSleepAssessment(messages, assessmentStart, score);
+
+    if (!hasSamples && !hasAssessment) {
+        return false;
+    }
+
+    auto sleepTable = m_conn->tableSchema("sleep");
+    auto assessmentTable = m_conn->tableSchema("sleep_assessment");
+    if ((hasSamples && !sleepTable) || (hasAssessment && !assessmentTable)) {
+        qDebug() << Q_FUNC_INFO << "Garmin: sleep tables missing";
+        return false;
+    }
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    if (hasSamples) {
+        KDbFieldList fields;
+        fields.addField(sleepTable->field("sleep_timestamp"));
+        fields.addField(sleepTable->field("sleep_timestamp_dt"));
+        fields.addField(sleepTable->field("sleep_stage"));
+
+        for (const GarminSleepSample& sample : samples) {
+            const qint64 stamp = sample.timestamp.toMSecsSinceEpoch() / 1000;
+            // A rescan parses the file again. The stage belongs to its
+            // timestamp, so the old row for it is replaced, not duplicated.
+            if (!m_conn->executeSql(KDbEscapedString("DELETE FROM sleep WHERE sleep_timestamp = %1").arg(stamp))) {
+                qDebug() << Q_FUNC_INFO << "Garmin: could not replace stage at" << stamp;
+                return false;
+            }
+            QList<QVariant> values;
+            values << stamp;
+            values << sample.timestamp;
+            values << sample.stage;
+            if (!m_conn->insertRecord(&fields, values)) {
+                qDebug() << Q_FUNC_INFO << "Garmin: error inserting sleep stage";
+                return false;
+            }
+        }
+    }
+
+    if (hasAssessment) {
+        const qint64 stamp = assessmentStart.toMSecsSinceEpoch() / 1000;
+        if (!m_conn->executeSql(KDbEscapedString("DELETE FROM sleep_assessment WHERE sleep_assessment_timestamp = %1").arg(stamp))) {
+            qDebug() << Q_FUNC_INFO << "Garmin: could not replace assessment at" << stamp;
+            return false;
+        }
+        KDbFieldList fields;
+        fields.addField(assessmentTable->field("sleep_assessment_timestamp"));
+        fields.addField(assessmentTable->field("sleep_assessment_timestamp_dt"));
+        fields.addField(assessmentTable->field("sleep_assessment_score"));
+
+        QList<QVariant> values;
+        values << stamp;
+        values << assessmentStart;
+        values << score;
+        if (!m_conn->insertRecord(&fields, values)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: error inserting sleep assessment";
+            return false;
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "sleep stages"
+             << (hasAssessment ? QStringLiteral("and score %1").arg(score) : QString());
+    return true;
+}
+
 void GarminDevice::rescanActivityFiles()
 {
     if (!mCommunicator) {
@@ -440,7 +521,10 @@ void GarminDevice::rescanActivityFiles()
             continue;
         }
         ++scanned;
+        // Sleep files hold no session, so the activity save refuses them.
         if (saveActivityMessages(messages)) {
+            ++saved;
+        } else if (saveSleepMessages(messages)) {
             ++saved;
         }
     }

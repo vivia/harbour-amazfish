@@ -59,6 +59,7 @@ private:
     void sendWeatherToWatch();
     void onActivityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages);
     bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
+    bool saveSleepMessages(const QVector<GarminFitMessage>& messages);
     virtual void refreshInformation() override;
 
     QString mPreferredService;
