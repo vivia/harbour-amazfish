@@ -633,6 +633,57 @@ void DeviceInterface::createTables()
         qDebug() << *t_stress;
     }
 
+    if (!m_conn->containsTable("sleep")) {
+        KDbTableSchema* t_sleep = new KDbTableSchema("sleep");
+        t_sleep->setCaption("Sleep Stages");
+        t_sleep->addField(f = new KDbField("sleep_id", KDbField::Integer,
+                              KDbField::PrimaryKey | KDbField::AutoInc, KDbField::Unsigned));
+        f->setCaption("ID");
+
+        t_sleep->addField(f = new KDbField("sleep_timestamp", KDbField::Integer, KDbField::Indexed));
+        f->setCaption("Timestamp");
+
+        t_sleep->addField(f = new KDbField("sleep_timestamp_dt", KDbField::DateTime, KDbField::Indexed));
+        f->setCaption("Timestamp in Date/Time format");
+
+        t_sleep->addField(f = new KDbField("sleep_stage", KDbField::Text));
+        f->setCaption("Stage");
+
+        if (!m_conn->createTable(t_sleep)) {
+            qDebug() << m_conn->result();
+            return;
+        }
+        qDebug() << "-- sleep created --";
+        qDebug() << *t_sleep;
+    }
+
+    // One row per night. The FIT sleep_assessment message holds a score set but
+    // carries no timestamp; the row is stamped with the sleep_start time instead.
+    // Only the overall score is kept, the sub-scores are not used anywhere.
+    if (!m_conn->containsTable("sleep_assessment")) {
+        KDbTableSchema* t_sleepass = new KDbTableSchema("sleep_assessment");
+        t_sleepass->setCaption("Sleep Assessment");
+        t_sleepass->addField(f = new KDbField("sleep_assessment_id", KDbField::Integer,
+                                 KDbField::PrimaryKey | KDbField::AutoInc, KDbField::Unsigned));
+        f->setCaption("ID");
+
+        t_sleepass->addField(f = new KDbField("sleep_assessment_timestamp", KDbField::Integer, KDbField::Indexed));
+        f->setCaption("Timestamp");
+
+        t_sleepass->addField(f = new KDbField("sleep_assessment_timestamp_dt", KDbField::DateTime, KDbField::Indexed));
+        f->setCaption("Timestamp in Date/Time format");
+
+        t_sleepass->addField(f = new KDbField("sleep_assessment_score", KDbField::ShortInteger));
+        f->setCaption("Overall Sleep Score");
+
+        if (!m_conn->createTable(t_sleepass)) {
+            qDebug() << m_conn->result();
+            return;
+        }
+        qDebug() << "-- sleep_assessment created --";
+        qDebug() << *t_sleepass;
+    }
+
     // The KDbField::Indexed flag is metadata only, the SQLite driver does not
     // create indexes for it. Without them every delete-before-insert in the
     // save paths and the UI range queries scan the whole table, and rescans
@@ -653,6 +704,8 @@ void DeviceInterface::createTables()
         { "temperature", "temperature_timestamp_dt" },
         { "stress", "stress_timestamp" },
         { "stress", "stress_timestamp_dt" },
+        { "sleep", "sleep_timestamp" },
+        { "sleep_assessment", "sleep_assessment_timestamp" },
         { "pai", "pai_date" },
         { "sports_meta", "sport_id" },
         { "sports_data", "name" },
