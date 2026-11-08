@@ -46,18 +46,33 @@ QVariant DataSource::data(const Type type, const QDate &day)
 
     if (type == DataSource::SleepSummary) {
         for (int i = 0; i < 10; i++) {
-            QList<DataSource::SleepSession> sessions = calculateSleep(day.addDays(-10 + i));
+            QDate d = day.addDays(-10 + i);
             QVariantMap pt;
-            pt["x"] = QDateTime(day.addDays(-10 + i)).toMSecsSinceEpoch() / 1000;
+            pt["x"] = QDateTime(d).toMSecsSinceEpoch() / 1000;
 
             float light = 0;
             float deep = 0;
-            for (const DataSource::SleepSession &s : std::as_const(sessions)) {
-                light += s.lightSleepDuration;
-                deep += s.deepSleepDuration;;
+            float rem = 0;
+
+            // Stage rows in the sleep table win over the marker based sessions,
+            // which stay as fallback for backends without stage data.
+            DataSource::SleepSession stages;
+            if (calculateSleepStages(d, stages)) {
+                light = stages.lightSleepDuration;
+                deep = stages.deepSleepDuration;
+                rem = stages.remSleepDuration;
+            } else {
+                QList<DataSource::SleepSession> sessions = calculateSleep(d);
+                for (const DataSource::SleepSession& s : std::as_const(sessions)) {
+                    light += s.lightSleepDuration;
+                    deep += s.deepSleepDuration;
+                }
             }
             pt["y"] = light / (60.0f*60.0f);
             pt["z"] = deep / (60.0f*60.0f);
+            // Always set w, even 0: the REM label reads it back from the last
+            // point, and an absent key leaves the old day's value in place.
+            pt["w"] = rem / (60.0f * 60.0f);
 
             result.append(pt);
         }
@@ -323,6 +338,71 @@ QList<DataSource::SleepSession> DataSource::calculateSleep(const QDate &day)
     
     return sessions;
     
+}
+
+// Stage rows of the sleep table ("unmeasurable", "awake", "light", "deep",
+// "rem"), counted in the same day-boundary window as calculateSleep(). A row
+// is valid until the next row; the last row of a window has no successor and
+// is not counted. Returns false when the window has no rows at all.
+bool DataSource::calculateSleepStages(const QDate& day, SleepSession& session)
+{
+    const QTime dayBoundary(AmazfishConfig::instance()->appSleepDayBoundary(), 0);
+    QDateTime startDate = QDateTime(day, dayBoundary); // In localtime
+    QDateTime endDate = startDate.addDays(1);
+
+    qint64 startSec = startDate.toMSecsSinceEpoch() / 1000;
+    qint64 endSec = endDate.toMSecsSinceEpoch() / 1000;
+
+    QString qry = "SELECT sleep_timestamp, sleep_stage FROM sleep WHERE sleep_timestamp >= ";
+    qry += QString::number(startSec) + " AND sleep_timestamp < ";
+    qry += QString::number(endSec) + " ORDER BY sleep_timestamp ASC";
+
+    long light = 0;
+    long deep = 0;
+    long rem = 0;
+    qint64 previousSample = 0;
+    QString previousStage;
+    bool haveRows = false;
+
+    if (m_conn && m_conn->isDatabaseUsed()) {
+        KDbCursor* curs = m_conn->executeQuery(KDbEscapedString(qry));
+
+        if (curs) {
+            if (curs->open() && curs->moveFirst()) {
+                while (!curs->eof()) {
+                    qint64 d = curs->value(0).toLongLong();
+                    QString stage = curs->value(1).toString();
+
+                    if (previousSample != 0) {
+                        long duration = d - previousSample;
+                        if (previousStage == "light") {
+                            light += duration;
+                        } else if (previousStage == "deep") {
+                            deep += duration;
+                        } else if (previousStage == "rem") {
+                            rem += duration;
+                        }
+                    }
+                    previousSample = d;
+                    previousStage = stage;
+                    haveRows = true;
+                    curs->moveNext();
+                }
+            }
+            m_conn->deleteCursor(curs);
+        } else {
+            qDebug() << "Error executing query";
+        }
+    }
+
+    if (!haveRows) {
+        return false;
+    }
+
+    session.lightSleepDuration = light;
+    session.deepSleepDuration = deep;
+    session.remSleepDuration = rem;
+    return true;
 }
 
 bool DataSource::isSleep(int kind)

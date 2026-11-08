@@ -44,6 +44,7 @@ QtObject {
     property color themeSecondaryColor: inactivePalette.text
     // descriptive items, secondary
     property color themeSecondaryHighlightColor: inactivePalette.text
+    property color themeTertiaryHighlightColor: palette.link
 
     // button sizes
     property real themeButtonWidthLarge: 256

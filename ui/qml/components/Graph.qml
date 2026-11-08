@@ -9,6 +9,7 @@ GraphData {
     property alias lastValue: graphData.lastValue
     property alias lastY: graphData.lastY
     property alias lastZ: graphData.lastZ
+    property alias lastW: graphData.lastW
     property alias colorMap: graphData.colorMap
     property alias defaultColor: graphData.defaultColor
 

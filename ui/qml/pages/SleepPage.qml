@@ -26,7 +26,7 @@ PagePL {
             font.pixelSize: styler.themeFontSizeExtraLarge * 2
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
-            text: qsTr("Total %1").arg(decimalToHourMin(graphSleepSummary.lastY + graphSleepSummary.lastZ))
+            text: qsTr("Total %1").arg(decimalToHourMin(graphSleepSummary.lastY + graphSleepSummary.lastZ + graphSleepSummary.lastW))
             horizontalAlignment: Text.AlignHCenter
         }
 
@@ -45,6 +45,15 @@ PagePL {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             text: qsTr("Deep %1").arg(decimalToHourMin(graphSleepSummary.lastZ))
+            horizontalAlignment: Text.AlignHCenter
+        }
+
+        LabelPL {
+            id: lblRemSleepLastnight
+            font.pixelSize: styler.themeFontSizeExtraLarge
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            text: qsTr("REM %1").arg(decimalToHourMin(graphSleepSummary.lastW))
             horizontalAlignment: Text.AlignHCenter
         }
 

@@ -45,6 +45,7 @@ QtObject {
     property color themeSecondaryColor: Kirigami.Theme.textColor
     // descriptive items, secondary
     property color themeSecondaryHighlightColor: Kirigami.Theme.disabledTextColor
+    property color themeTertiaryHighlightColor: Kirigami.Theme.highlightColor
 
     // button sizes
     property real themeButtonWidthLarge: 256
