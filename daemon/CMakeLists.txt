@@ -133,6 +133,7 @@ set(SOURCES
 ./src/services/garmin/garminfitsleep.cpp
 ./src/services/garmin/garminfithrv.cpp
 ./src/services/garmin/garminfitmonitor.cpp
+./src/services/garmin/garminfitspo2.cpp
 ./src/services/garmin/garminfitgpx.cpp
 ./src/services/garmin/garminfilterstatusmessage.cpp
 ./src/services/garmin/garminfiletransferdatamessage.cpp
