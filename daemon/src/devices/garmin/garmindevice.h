@@ -4,6 +4,7 @@
 #include "abstractdevice.h"
 #include "services/garmin/communicator_v2.h"
 #include "services/garmin/garminfitreader.h"
+#include "services/garmin/garminfitsleep.h"
 #include "services/garmin/garminnotificationhandler.h"
 #include "services/garmin/protobufhandler.h"
 
@@ -57,9 +58,10 @@ private:
     void initialise();
     void onWeatherRequestReceived();
     void sendWeatherToWatch();
-    void onActivityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages);
+    void onFileParsed(quint8 type, quint8 subType, qint32 stamp, const QVector<GarminFitMessage>& messages);
     bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
     bool saveSleepMessages(const QVector<GarminFitMessage>& messages);
+    bool saveSleepData(const QVector<GarminSleepSample>& samples, const QDateTime& assessmentStart, int score);
     virtual void refreshInformation() override;
 
     QString mPreferredService;

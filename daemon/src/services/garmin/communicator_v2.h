@@ -36,6 +36,16 @@ class ProtobufHandler;
 // =============================================================================
 static constexpr const char* BASE_UUID_FORMAT = "6A4E%04X-667B-11E3-949A-0800200C9A66";
 static constexpr quint64 AMAZFISH_CLIENT_ID = 2;
+
+// Directory entry type and subtype of the file categories this service
+// downloads. FIT activities and sleep files are both in directory type 128.
+const quint8 DIR_TYPE_FIT = 128;
+const quint8 DIR_SUBTYPE_ACTIVITY = 4;
+const quint8 DIR_SUBTYPE_SLEEP = 49;
+// Config keys of the saved stamp per category, in seconds on the watch's own
+// epoch. Written by GarminDevice::onFileParsed() after a file was processed.
+extern const char* STAMP_ACTIVITY;
+extern const char* STAMP_SLEEP;
 struct deviceInfo {
 
     QString softwareRevision;
@@ -200,9 +210,10 @@ signals:
     // picked in the UI, not with the coordinates in the request, so the
     // request itself is not passed on.
     void weatherRequestReceived();
-    // A downloaded activity file was parsed. fileStamp is the file time from
-    // the watch's directory entry, used to remember what was saved already.
-    void activityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages);
+    // A downloaded file was parsed. fileStamp is the file time from the watch's
+    // directory entry, used to remember what was saved already. The type and
+    // subtype say which category the file came from.
+    void fileParsed(quint8 dataType, quint8 subType, qint32 fileStamp, const QVector<GarminFitMessage>& messages);
     // The watch asked the paired phone to make a sound, or to stop.
     void findPhoneRequested();
     void findPhoneCancelled();

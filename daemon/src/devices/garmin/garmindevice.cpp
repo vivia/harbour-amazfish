@@ -57,7 +57,8 @@ Amazfish::DataTypes GarminDevice::supportedDataTypes() const
     return Amazfish::DataType::TYPE_SPO2
         | Amazfish::DataType::TYPE_HRV
         | Amazfish::DataType::TYPE_HEART_RATE
-        | Amazfish::DataType::TYPE_ACTIVITY;
+        | Amazfish::DataType::TYPE_ACTIVITY
+        | Amazfish::DataType::TYPE_SLEEP;
 }
 
 QString GarminDevice::deviceType() const
@@ -272,7 +273,7 @@ QBLEService *GarminDevice::drv_createService(const QString &uuid, const QString 
         connect(mNotificationHandler.data(), &GarminNotificationHandler::acceptIncomingCall, this, &GarminDevice::onAnswerCallEvent);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::rejectIncomingCall, this, &GarminDevice::onRejectCallEvent);
         connect(com.data(), &CommunicatorV2::weatherRequestReceived, this, &GarminDevice::onWeatherRequestReceived, Qt::UniqueConnection);
-        connect(com.data(), &CommunicatorV2::activityFileParsed, this, &GarminDevice::onActivityFileParsed, Qt::UniqueConnection);
+        connect(com.data(), &CommunicatorV2::fileParsed, this, &GarminDevice::onFileParsed, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneRequested, this, &GarminDevice::onFindPhoneRequested, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneCancelled, this, &GarminDevice::onFindPhoneCancelled, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::musicControlCommand, this, &GarminDevice::onMusicControlCommand, Qt::UniqueConnection);
@@ -346,12 +347,31 @@ void GarminDevice::fetchData(Amazfish::DataTypes dataTypes)
     }
 }
 
-void GarminDevice::onActivityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages)
+void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const QVector<GarminFitMessage>& messages)
 {
     // The communicator only queues files newer than the saved stamp. The stamp
     // is in seconds on the watch's own epoch.
+    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_SLEEP) {
+        QVector<GarminSleepSample> samples;
+        QDateTime assessmentStart;
+        int score = 0;
+        buildGarminSleepSamples(messages, samples);
+        buildGarminSleepAssessment(messages, assessmentStart, score);
+        if (samples.isEmpty() && !assessmentStart.isValid()) {
+            // A rest detection with no stages and no score: nothing to store,
+            // but the file is done with. Advance the stamp so it is not
+            // fetched again on every sync.
+            qDebug() << Q_FUNC_INFO << "Garmin: sleep file has no stages and no score, skipping";
+            AmazfishConfig::instance()->setValue(STAMP_SLEEP, stamp);
+            return;
+        }
+        if (saveSleepData(samples, assessmentStart, score)) {
+            AmazfishConfig::instance()->setValue(STAMP_SLEEP, stamp);
+        }
+        return;
+    }
     if (saveActivityMessages(messages)) {
-        AmazfishConfig::instance()->setValue("device/lastactivityfilestamp", fileStamp);
+        AmazfishConfig::instance()->setValue(STAMP_ACTIVITY, stamp);
     }
 }
 
@@ -411,17 +431,25 @@ bool GarminDevice::saveActivityMessages(const QVector<GarminFitMessage>& message
 
 bool GarminDevice::saveSleepMessages(const QVector<GarminFitMessage>& messages)
 {
+    QVector<GarminSleepSample> samples;
+    QDateTime assessmentStart;
+    int score = 0;
+    buildGarminSleepSamples(messages, samples);
+    buildGarminSleepAssessment(messages, assessmentStart, score);
+    return saveSleepData(samples, assessmentStart, score);
+}
+
+bool GarminDevice::saveSleepData(const QVector<GarminSleepSample>& samples, const QDateTime& assessmentStart, int score)
+{
     if (!m_conn || !m_conn->isDatabaseUsed()) {
         qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
         return false;
     }
 
-    QVector<GarminSleepSample> samples;
-    const bool hasSamples = buildGarminSleepSamples(messages, samples);
-
-    QDateTime assessmentStart;
-    int score = 0;
-    const bool hasAssessment = buildGarminSleepAssessment(messages, assessmentStart, score);
+    // The builders leave samples empty when there was no real sleep, and an
+    // invalid start when there was no score.
+    const bool hasSamples = !samples.isEmpty();
+    const bool hasAssessment = assessmentStart.isValid();
 
     if (!hasSamples && !hasAssessment) {
         return false;

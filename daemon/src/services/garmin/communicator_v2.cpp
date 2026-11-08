@@ -41,11 +41,8 @@ static const int WEATHER_ACK_TIMEOUT_MS = 5000;
 // for so far; FIT files need their own bound when the per-file pull is added.
 static const qint32 MAX_TRANSFER_BYTES = 1024 * 1024;
 
-// Directory entry type and subtype of a FIT activity file.
-static const quint8 DIR_TYPE_ACTIVITY = 128;
-static const quint8 DIR_SUBTYPE_ACTIVITY = 4;
-// Written by GarminDevice::onActivityFileParsed() after a successful save.
-static const char* STAMP_ACTIVITY = "device/lastactivityfilestamp";
+const char* STAMP_ACTIVITY = "device/lastactivityfilestamp";
+const char* STAMP_SLEEP = "device/lastsleepfilestamp";
 
 // =============================================================================
 // CommunicatorV2
@@ -64,7 +61,8 @@ CommunicatorV2::CommunicatorV2(const QString &path, QObject* parent)
 
     mState->cobsCodec=new CobsCoDec(this);
 
-    mFileCategories.append(FileCategory { DIR_TYPE_ACTIVITY, DIR_SUBTYPE_ACTIVITY, "activity", STAMP_ACTIVITY });
+    mFileCategories.append(FileCategory { DIR_TYPE_FIT, DIR_SUBTYPE_ACTIVITY, "activity", STAMP_ACTIVITY, {} });
+    mFileCategories.append(FileCategory { DIR_TYPE_FIT, DIR_SUBTYPE_SLEEP, "sleep", STAMP_SLEEP, {} });
 
     onConnectionStateChange(true);
 }
@@ -539,7 +537,7 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     QString fitError;
     if (parseGarminFitFile(mFileBytes, fitMessages, fitError)) {
         logGarminFitSummary(fitMessages, mFileBytes.size());
-        emit activityFileParsed(mRequestedEntry.timestamp, fitMessages);
+        emit fileParsed(mRequestedEntry.dataType, mRequestedEntry.subType, mRequestedEntry.timestamp, fitMessages);
     } else {
         qDebug() << Q_FUNC_INFO << "Garmin: cannot parse FIT file:" << fitError;
     }
