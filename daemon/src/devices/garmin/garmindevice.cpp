@@ -12,6 +12,8 @@
 #include "services/garmin/garminfitsleep.h"
 #include "services/garmin/garminfitsummary.h"
 
+#include "services/garmin/garminfitspo2.h"
+
 #include <KDb.h>
 #include <QDomDocument>
 #include <QStringList>
@@ -388,15 +390,26 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
     }
     if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_MONITOR) {
         QVector<GarminMonitorSample> samples;
+        QVector<GarminSpo2Sample> spo2Samples;
         buildGarminMonitorSamples(messages, samples);
-        if (samples.isEmpty()) {
-            // A file with no heart rate and no step movement: nothing to
+        buildGarminSpo2Samples(messages, spo2Samples);
+        if (samples.isEmpty() && spo2Samples.isEmpty()) {
+            // No heart rate, no step movement and no blood oxygen: nothing to
             // store, but the file is done with. Advance the stamp.
             qDebug() << Q_FUNC_INFO << "Garmin: monitor file has no samples, skipping";
             AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
             return;
         }
-        if (saveMonitorData(samples)) {
+        bool saved = true;
+        if (!samples.isEmpty() && !saveMonitorData(samples)) {
+            saved = false;
+        }
+        if (!spo2Samples.isEmpty() && !saveSpo2Data(spo2Samples)) {
+            saved = false;
+        }
+        // Move the stamp only when every domain the file offered is stored.
+        // Otherwise the file is fetched again and the rest can still arrive.
+        if (saved) {
             AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
         }
         return;
@@ -610,7 +623,13 @@ bool GarminDevice::saveMonitorMessages(const QVector<GarminFitMessage>& messages
     if (!buildGarminMonitorSamples(messages, samples)) {
         return false;
     }
-    return saveMonitorData(samples);
+    bool saved = !samples.isEmpty() && saveMonitorData(samples);
+
+    QVector<GarminSpo2Sample> spo2Samples;
+    if (buildGarminSpo2Samples(messages, spo2Samples)) {
+        saved = saveSpo2Data(spo2Samples) || saved;
+    }
+    return saved;
 }
 
 bool GarminDevice::saveMonitorData(const QVector<GarminMonitorSample>& samples)
@@ -679,6 +698,55 @@ bool GarminDevice::saveMonitorData(const QVector<GarminMonitorSample>& samples)
 
     tg.commit();
     qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "monitor samples";
+    return true;
+}
+
+bool GarminDevice::saveSpo2Data(const QVector<GarminSpo2Sample>& samples)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+    if (samples.isEmpty()) {
+        return false;
+    }
+
+    auto spo2Table = m_conn->tableSchema("spo2");
+    if (!spo2Table) {
+        qDebug() << Q_FUNC_INFO << "Garmin: spo2 table missing";
+        return false;
+    }
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    for (const GarminSpo2Sample& sample : samples) {
+        const qint64 stamp = sample.timestamp.toMSecsSinceEpoch() / 1000;
+        // A rescan parses the file again. The reading belongs to its
+        // timestamp, so the old row for it is replaced, not duplicated.
+        if (!m_conn->executeSql(KDbEscapedString("DELETE FROM spo2 WHERE spo2_timestamp = %1").arg(stamp))) {
+            qDebug() << Q_FUNC_INFO << "Garmin: could not replace spo2 reading at" << stamp;
+            return false;
+        }
+        KDbFieldList fields;
+        fields.addField(spo2Table->field("spo2_timestamp"));
+        fields.addField(spo2Table->field("spo2_timestamp_dt"));
+        fields.addField(spo2Table->field("spo2_automatic"));
+        fields.addField(spo2Table->field("spo2_value"));
+
+        QList<QVariant> values;
+        values << stamp;
+        values << sample.timestamp;
+        values << sample.automatic;
+        values << sample.value;
+        if (!m_conn->insertRecord(&fields, values)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: error inserting spo2 reading";
+            return false;
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "spo2 readings";
     return true;
 }
 

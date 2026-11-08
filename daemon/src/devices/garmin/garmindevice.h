@@ -10,6 +10,8 @@
 #include "services/garmin/garminnotificationhandler.h"
 #include "services/garmin/protobufhandler.h"
 
+#include "services/garmin/garminfitspo2.h"
+
 #include <QObject>
 #include <QSharedPointer>
 
@@ -68,6 +70,7 @@ private:
     bool saveHrvData(const QVector<GarminHrvSample>& samples);
     bool saveMonitorMessages(const QVector<GarminFitMessage>& messages);
     bool saveMonitorData(const QVector<GarminMonitorSample>& samples);
+    bool saveSpo2Data(const QVector<GarminSpo2Sample>& samples);
     virtual void refreshInformation() override;
 
     QString mPreferredService;
