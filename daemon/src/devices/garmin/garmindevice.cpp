@@ -13,6 +13,7 @@
 #include "services/garmin/garminfitsummary.h"
 
 #include "services/garmin/garminfitspo2.h"
+#include "services/garmin/garminfitstress.h"
 
 #include <KDb.h>
 #include <QDomDocument>
@@ -58,6 +59,7 @@ Amazfish::Features GarminDevice::supportedFeatures() const
 Amazfish::DataTypes GarminDevice::supportedDataTypes() const
 {
     return Amazfish::DataType::TYPE_SPO2
+        | Amazfish::DataType::TYPE_STRESS
         | Amazfish::DataType::TYPE_HRV
         | Amazfish::DataType::TYPE_HEART_RATE
         | Amazfish::DataType::TYPE_ACTIVITY
@@ -391,11 +393,13 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
     if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_MONITOR) {
         QVector<GarminMonitorSample> samples;
         QVector<GarminSpo2Sample> spo2Samples;
+        QVector<GarminStressSample> stressSamples;
         buildGarminMonitorSamples(messages, samples);
         buildGarminSpo2Samples(messages, spo2Samples);
-        if (samples.isEmpty() && spo2Samples.isEmpty()) {
-            // No heart rate, no step movement and no blood oxygen: nothing to
-            // store, but the file is done with. Advance the stamp.
+        buildGarminStressSamples(messages, stressSamples);
+        if (samples.isEmpty() && spo2Samples.isEmpty() && stressSamples.isEmpty()) {
+            // No heart rate, no step movement, no blood oxygen and no stress:
+            // nothing to store, but the file is done with. Advance the stamp.
             qDebug() << Q_FUNC_INFO << "Garmin: monitor file has no samples, skipping";
             AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
             return;
@@ -405,6 +409,9 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
             saved = false;
         }
         if (!spo2Samples.isEmpty() && !saveSpo2Data(spo2Samples)) {
+            saved = false;
+        }
+        if (!stressSamples.isEmpty() && !saveStressData(stressSamples)) {
             saved = false;
         }
         // Move the stamp only when every domain the file offered is stored.
@@ -629,6 +636,11 @@ bool GarminDevice::saveMonitorMessages(const QVector<GarminFitMessage>& messages
     if (buildGarminSpo2Samples(messages, spo2Samples)) {
         saved = saveSpo2Data(spo2Samples) || saved;
     }
+
+    QVector<GarminStressSample> stressSamples;
+    if (buildGarminStressSamples(messages, stressSamples)) {
+        saved = saveStressData(stressSamples) || saved;
+    }
     return saved;
 }
 
@@ -747,6 +759,55 @@ bool GarminDevice::saveSpo2Data(const QVector<GarminSpo2Sample>& samples)
 
     tg.commit();
     qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "spo2 readings";
+    return true;
+}
+
+bool GarminDevice::saveStressData(const QVector<GarminStressSample>& samples)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+    if (samples.isEmpty()) {
+        return false;
+    }
+
+    auto stressTable = m_conn->tableSchema("stress");
+    if (!stressTable) {
+        qDebug() << Q_FUNC_INFO << "Garmin: stress table missing";
+        return false;
+    }
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    for (const GarminStressSample& sample : samples) {
+        const qint64 stamp = sample.timestamp.toMSecsSinceEpoch() / 1000;
+        // A rescan parses the file again. Replace the old automatic reading
+        // for this timestamp. Manual readings (type 2) are never touched.
+        if (!m_conn->executeSql(KDbEscapedString("DELETE FROM stress WHERE stress_timestamp = %1 AND stress_type = 1").arg(stamp))) {
+            qDebug() << Q_FUNC_INFO << "Garmin: could not replace stress reading at" << stamp;
+            return false;
+        }
+        KDbFieldList fields;
+        fields.addField(stressTable->field("stress_timestamp"));
+        fields.addField(stressTable->field("stress_timestamp_dt"));
+        fields.addField(stressTable->field("stress_value"));
+        fields.addField(stressTable->field("stress_type"));
+
+        QList<QVariant> values;
+        values << stamp;
+        values << sample.timestamp;
+        values << sample.value;
+        values << 1; // stress_type 1: automatic, what StressAuto filters for
+        if (!m_conn->insertRecord(&fields, values)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: error inserting stress reading";
+            return false;
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "stress readings";
     return true;
 }
 
