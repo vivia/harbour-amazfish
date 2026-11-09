@@ -223,7 +223,11 @@ PagePL {
 
     function updateManual() {
         var dataPoints = dataSource.data(DataSource.StressManual, day);
-        lblManualStressValue.text = new Date(dataPoints[0].x) + " : " + dataPoints[0].y
+        // Garmin and ZeppOS never write manual readings, so the query can
+        // come back empty.
+        if (dataPoints.length > 0) {
+            lblManualStressValue.text = new Date(dataPoints[0].x) + " : " + dataPoints[0].y
+        }
     }
 
     function updateGraphs() {
