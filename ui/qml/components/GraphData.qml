@@ -365,9 +365,15 @@ Item {
                                 lastValue += points[end-1].w
                             }
                         }
-                        if (lastValue) {
-                            labelLastValue.text = root.createYLabel(lastValue)+root.axisY.units;
-                        }
+                    } else {
+                        lastValue = 0;
+                    }
+                    // Assign zero too: without this the label keeps the text
+                    // of the previous day whenever the current one is empty.
+                    if (lastValue) {
+                        labelLastValue.text = root.createYLabel(lastValue)+root.axisY.units;
+                    } else {
+                        labelLastValue.text = "";
                     }
                 }
             }
