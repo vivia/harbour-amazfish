@@ -64,7 +64,7 @@ public:
     };
     Q_ENUM(Settings)
 
-    enum class DataType{
+    enum class DataType {
         TYPE_NONE = 0,
         TYPE_DEBUGLOG = 1,
         TYPE_ACTIVITY = 2,
@@ -77,7 +77,8 @@ public:
         TYPE_TEMPERATURE = 256,
         TYPE_SLEEP = 512,
         TYPE_HUAMI_STATISTICS = 1024,
-        TYPE_HRV=2048,
+        TYPE_HRV = 2048,
+        TYPE_VO2MAX = 4096,
 
     };
     Q_ENUM(DataType)
