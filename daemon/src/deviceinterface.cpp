@@ -645,6 +645,29 @@ void DeviceInterface::createTables()
         qDebug() << *t_stress;
     }
 
+    if (!m_conn->containsTable("vo2max")) {
+        KDbTableSchema* t_vo2max = new KDbTableSchema("vo2max");
+        t_vo2max->setCaption("VO2 Max");
+        t_vo2max->addField(f = new KDbField("vo2max_id", KDbField::Integer, KDbField::PrimaryKey | KDbField::AutoInc, KDbField::Unsigned));
+        f->setCaption("ID");
+
+        t_vo2max->addField(f = new KDbField("vo2max_timestamp", KDbField::Integer, KDbField::Indexed));
+        f->setCaption("Timestamp");
+
+        t_vo2max->addField(f = new KDbField("vo2max_timestamp_dt", KDbField::DateTime, KDbField::Indexed));
+        f->setCaption("Timestamp in Date/Time format");
+
+        t_vo2max->addField(f = new KDbField("vo2max_value", KDbField::Float));
+        f->setCaption("Value");
+
+        if (!m_conn->createTable(t_vo2max)) {
+            qDebug() << m_conn->result();
+            return;
+        }
+        qDebug() << "-- vo2max created --";
+        qDebug() << *t_vo2max;
+    }
+
     if (!m_conn->containsTable("sleep")) {
         KDbTableSchema* t_sleep = new KDbTableSchema("sleep");
         t_sleep->setCaption("Sleep Stages");
