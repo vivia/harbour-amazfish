@@ -135,6 +135,7 @@ set(SOURCES
 ./src/services/garmin/garminfitmonitor.cpp
 ./src/services/garmin/garminfitspo2.cpp
 ./src/services/garmin/garminfitstress.cpp
+./src/services/garmin/garminfitmetrics.cpp
 ./src/services/garmin/garminfitgpx.cpp
 ./src/services/garmin/garminfilterstatusmessage.cpp
 ./src/services/garmin/garminfiletransferdatamessage.cpp
