@@ -12,6 +12,7 @@
 #include "services/garmin/garminfitsleep.h"
 #include "services/garmin/garminfitsummary.h"
 
+#include "services/garmin/garminfitmetrics.h"
 #include "services/garmin/garminfitspo2.h"
 #include "services/garmin/garminfitstress.h"
 
@@ -60,6 +61,7 @@ Amazfish::DataTypes GarminDevice::supportedDataTypes() const
 {
     return Amazfish::DataType::TYPE_SPO2
         | Amazfish::DataType::TYPE_STRESS
+        | Amazfish::DataType::TYPE_VO2MAX
         | Amazfish::DataType::TYPE_HRV
         | Amazfish::DataType::TYPE_HEART_RATE
         | Amazfish::DataType::TYPE_ACTIVITY
@@ -418,6 +420,22 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
         // Otherwise the file is fetched again and the rest can still arrive.
         if (saved) {
             AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
+        }
+        return;
+    }
+    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_METRICS) {
+        QVector<GarminVo2maxSample> samples;
+        buildGarminVo2maxSamples(messages, samples);
+        if (samples.isEmpty()) {
+            // Most metrics files hold other metrics and no VO2max reading.
+            // Nothing to store, but the file is done with. Advance the stamp
+            // so it is not fetched again.
+            qDebug() << Q_FUNC_INFO << "Garmin: metrics file has no vo2max reading, skipping";
+            AmazfishConfig::instance()->setValue(STAMP_METRICS, stamp);
+            return;
+        }
+        if (saveVo2maxData(samples)) {
+            AmazfishConfig::instance()->setValue(STAMP_METRICS, stamp);
         }
         return;
     }
@@ -811,6 +829,62 @@ bool GarminDevice::saveStressData(const QVector<GarminStressSample>& samples)
     return true;
 }
 
+bool GarminDevice::saveMetricsMessages(const QVector<GarminFitMessage>& messages)
+{
+    QVector<GarminVo2maxSample> samples;
+    if (!buildGarminVo2maxSamples(messages, samples)) {
+        return false;
+    }
+    return !samples.isEmpty() && saveVo2maxData(samples);
+}
+
+bool GarminDevice::saveVo2maxData(const QVector<GarminVo2maxSample>& samples)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+    if (samples.isEmpty()) {
+        return false;
+    }
+
+    auto vo2maxTable = m_conn->tableSchema("vo2max");
+    if (!vo2maxTable) {
+        qDebug() << Q_FUNC_INFO << "Garmin: vo2max table missing";
+        return false;
+    }
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    for (const GarminVo2maxSample& sample : samples) {
+        const qint64 stamp = sample.timestamp.toMSecsSinceEpoch() / 1000;
+        // A rescan parses the file again. The reading belongs to its
+        // timestamp, so the old row for it is replaced, not duplicated.
+        if (!m_conn->executeSql(KDbEscapedString("DELETE FROM vo2max WHERE vo2max_timestamp = %1").arg(stamp))) {
+            qDebug() << Q_FUNC_INFO << "Garmin: could not replace vo2max reading at" << stamp;
+            return false;
+        }
+        KDbFieldList fields;
+        fields.addField(vo2maxTable->field("vo2max_timestamp"));
+        fields.addField(vo2maxTable->field("vo2max_timestamp_dt"));
+        fields.addField(vo2maxTable->field("vo2max_value"));
+
+        QList<QVariant> values;
+        values << stamp;
+        values << sample.timestamp;
+        values << sample.value;
+        if (!m_conn->insertRecord(&fields, values)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: error inserting vo2max reading";
+            return false;
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "vo2max readings";
+    return true;
+}
+
 void GarminDevice::rescanActivityFiles()
 {
     if (!mCommunicator) {
@@ -851,6 +925,8 @@ void GarminDevice::rescanActivityFiles()
         } else if (saveHrvMessages(messages)) {
             ++saved;
         } else if (saveMonitorMessages(messages)) {
+            ++saved;
+        } else if (saveMetricsMessages(messages)) {
             ++saved;
         }
     }
