@@ -222,6 +222,13 @@ QVariant DataSource::data(const Type type, const QDate &day)
         } else if (type == DataSource::StressManual) { //Latest Manual reading
             qry = "SELECT stress_timestamp_dt, stress_value FROM stress WHERE stress_type = 2"
                     " ORDER BY stress_timestamp_dt DESC LIMIT 1";
+        } else if (type == DataSource::Vo2maxSummary) {
+            qry = "SELECT date(vo2max_timestamp_dt), max(vo2max_value) FROM vo2max "
+                  "WHERE date(vo2max_timestamp_dt) >= date('"
+                + day.toString("yyyy-MM-ddT00:00:00") + "','-10 day')"
+                                                        " AND vo2max_timestamp_dt <= '"
+                + day.toString("yyyy-MM-ddT23:59:59") + "' GROUP BY date(vo2max_timestamp_dt)"
+                                                        " ORDER BY vo2max_timestamp_dt ASC";
         }
 
         qDebug() << qry;
