@@ -25,7 +25,8 @@ public:
         BodyTemperature = 11,
         StressAuto = 12,
         StressManual = 13,
-        StressSummary = 14
+        StressSummary = 14,
+        Vo2maxSummary = 15
     };
     Q_ENUM(Type)
 

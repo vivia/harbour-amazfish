@@ -114,6 +114,50 @@ PagePL {
         }
 
         Graph {
+            id: graphVo2max
+            graphTitle: qsTr("VO2max")
+            graphHeight: 300
+
+            axisX.mask: "MM/dd"
+            axisY.units: qsTr("mL/kg/min")
+            type: DataSource.Vo2maxSummary
+            graphType: line
+
+            // Bands depend on age and gender, so they follow the profile.
+            property var bands: AmazfishConfig.vo2maxBands()
+
+            // The axis is pinned to the bands, not to the readings. A scale of
+            // its own would put every band boundary off the top of the chart
+            // and the colours would have no visible reference.
+            minY: 0
+            maxY: bands.length === 4 ? Math.ceil(Math.max(suggestedMaxY, bands[0] * 1.1) / 10) * 10
+                                     : Math.max(20, Math.ceil(suggestedMaxY / 10) * 10)
+
+            visible: supportsDataRefresh(Amazfish.TYPE_VO2MAX)
+
+            // getColor() stops at the first limit a value is at or under, while
+            // the band table gives the lower bound of each band: a value
+            // exactly on a bound is coloured with the band below it. The top
+            // entry uses maxY, which is above the highest band, so a superior
+            // reading does not fall through to defaultColor.
+            colorMap: bands.length === 4 ? [
+                          {"limit": bands[3], "color": "grey"},
+                          {"limit": bands[2], "color": "orange"},
+                          {"limit": bands[1], "color": "lightgreen"},
+                          {"limit": bands[0], "color": "green"},
+                          {"limit": maxY, "color": "darkgreen"},
+                      ] : []
+            defaultColor: "blue"
+
+            valueConverter: function(value) {
+                return value.toFixed(1);
+            }
+            onClicked: {
+                updateGraph(day);
+            }
+        }
+
+        Graph {
             id: graphBodyTemperature
             graphTitle: qsTr("Body Temperature")
             graphHeight: 300
@@ -141,6 +185,7 @@ PagePL {
         graphSteps.updateGraph(day);
         graphIntensity.updateGraph(day);
         graphHRV.updateGraph(day);
+        graphVo2max.updateGraph(day);
         graphBodyTemperature.updateGraph(day);
     }
 
