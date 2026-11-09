@@ -124,6 +124,12 @@ public:
     QVariant value(const QString &key, const QVariant &def = QVariant()) const;
     void setValue(const QString &key, const QVariant &value);
 
+    // Reference bands for a VO2max reading, for the age and gender in the
+    // user profile. Returns the lower bound (inclusive) of the superior,
+    // excellent, good and fair bands, highest first. A value below the last
+    // bound is poor. Empty if no birthday is set.
+    Q_INVOKABLE QVariantList vo2maxBands() const;
+
     STRING_OPTION(QStringLiteral("pairedAddress"), pairedAddress, setPairedAddress, QString())
     STRING_OPTION(QStringLiteral("pairedName"),    pairedName,    setPairedName,    QString())
     STRING_OPTION(QStringLiteral("pairedType"),    pairedType,    setPairedType,    QString())
