@@ -66,7 +66,6 @@ private:
     void sendWeatherToWatch();
     void onFileParsed(quint8 type, quint8 subType, qint32 stamp, const QVector<GarminFitMessage>& messages);
     bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
-    void rescanNextFile();
     bool saveSleepMessages(const QVector<GarminFitMessage>& messages);
     bool saveSleepData(const QVector<GarminSleepSample>& samples, const QDateTime& assessmentStart, int score);
     bool saveHrvMessages(const QVector<GarminFitMessage>& messages);
@@ -77,6 +76,7 @@ private:
     bool saveStressData(const QVector<GarminStressSample>& samples);
     bool saveMetricsMessages(const QVector<GarminFitMessage>& messages);
     bool saveVo2maxData(const QVector<GarminVo2maxSample>& samples);
+    void rescanNextFile();
     virtual void refreshInformation() override;
 
     QString mPreferredService;
