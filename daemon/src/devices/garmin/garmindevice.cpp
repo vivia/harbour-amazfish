@@ -285,6 +285,11 @@ QBLEService *GarminDevice::drv_createService(const QString &uuid, const QString 
         connect(com.data(), &CommunicatorV2::findPhoneRequested, this, &GarminDevice::onFindPhoneRequested, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneCancelled, this, &GarminDevice::onFindPhoneCancelled, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::musicControlCommand, this, &GarminDevice::onMusicControlCommand, Qt::UniqueConnection);
+        // A fresh communicator knows nothing about weather yet. Hand it what
+        // we already have, so HttpService requests are answered right away.
+        if (mWeather) {
+            com->setWeatherCache(mWeather);
+        }
         setConnectionState("authenticated");
         return com.data();
     }
@@ -312,8 +317,14 @@ void GarminDevice::initialise()
 void GarminDevice::sendWeather(CurrentWeather* weather)
 {
     mWeather = weather;
+    // Keep the communicator's copy current for the HttpService weather
+    // endpoints the watch fetches on its own.
+    if (mCommunicator) {
+        mCommunicator->setWeatherCache(weather);
+    }
+    // Answer a request the watch sent while we had no data. A Lily 2 fetches
+    // weather over HttpService itself, so never push unasked.
     if (mWeatherRequested) {
-        // The watch asked before the first weather reply had arrived.
         mWeatherRequested = false;
         sendWeatherToWatch();
     }

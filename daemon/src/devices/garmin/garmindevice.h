@@ -81,9 +81,8 @@ private:
 
     QString mPreferredService;
 
-    // Owned by DeviceInterface, so it outlives the device. The watch asks for
-    // weather, it never receives a push, so the data is only kept to answer
-    // that request with.
+    // Owned by DeviceInterface, so it outlives the device. Kept to answer the
+    // watch's request and to serve the HttpService weather endpoints.
     CurrentWeather* mWeather = nullptr;
     // The watch asked before the phone had weather. sendWeather() answers then.
     bool mWeatherRequested = false;
