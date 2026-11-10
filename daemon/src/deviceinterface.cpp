@@ -343,18 +343,6 @@ void DeviceInterface::createTables()
         }
         qDebug() << "-- mi_band_activity created --";
         qDebug() << *t_activity;
-    } else {
-        //Upgrade schema with index
-        qDebug() << "Upgrading mi_band_activity with INDEX";
-        KDbTableSchema *t_activity = m_conn->tableSchema("mi_band_activity");
-        if (!t_activity->field("timestamp")->isIndexed()) {
-            if (!m_conn->executeSql(KDbEscapedString("CREATE INDEX IF NOT EXISTS idx_mi_band_activity_timestamp ON mi_band_activity (timestamp);"))) {
-                qWarning() << "Cannot create index on mi_band_activity(timestamp)";
-            }
-            if (!m_conn->executeSql(KDbEscapedString("CREATE INDEX IF NOT EXISTS idx_mi_band_activity_timestamp_dt ON mi_band_activity (timestamp_dt);"))) {
-                qWarning() << "Cannot create index on mi_band_activity(timestamp_dt)";
-            }
-        }
     }
 
 
@@ -717,6 +705,44 @@ void DeviceInterface::createTables()
         }
         qDebug() << "-- sleep_assessment created --";
         qDebug() << *t_sleepass;
+    }
+
+    // The KDbField::Indexed flag is metadata only, the SQLite driver does not
+    // create indexes for it. Without them every delete-before-insert in the
+    // save paths and the UI range queries scan the whole table, and rescans
+    // get slower as the tables grow. Keep this list in sync with the queries;
+    // columns only used inside date() are left out, an index cannot serve them.
+    struct TableIndex {
+        const char* table;
+        const char* column;
+    };
+    static const TableIndex indexes[] = {
+        { "mi_band_activity", "timestamp" },
+        { "mi_band_activity", "timestamp_dt" },
+        { "hrv", "hrv_timestamp" },
+        { "hrv", "hrv_timestamp_dt" },
+        { "spo2", "spo2_timestamp" },
+        { "spo2sleep", "spo2sleep_timestamp" },
+        { "temperature", "temperature_timestamp" },
+        { "temperature", "temperature_timestamp_dt" },
+        { "stress", "stress_timestamp" },
+        { "stress", "stress_timestamp_dt" },
+        { "vo2max", "vo2max_timestamp" },
+        { "sleep", "sleep_timestamp" },
+        { "sleep_assessment", "sleep_assessment_timestamp" },
+        { "pai", "pai_date" },
+        { "sports_meta", "sport_id" },
+        { "sports_data", "name" },
+    };
+    for (const TableIndex& index : indexes) {
+        KDbEscapedString sql = KDbEscapedString("CREATE INDEX IF NOT EXISTS idx_%1_%2 ON %3 (%4)")
+                                   .arg(QString::fromLatin1(index.table))
+                                   .arg(QString::fromLatin1(index.column))
+                                   .arg(QString::fromLatin1(index.table))
+                                   .arg(QString::fromLatin1(index.column));
+        if (!m_conn->executeSql(sql)) {
+            qWarning() << "Cannot create index on" << index.table << "(" << index.column << ")";
+        }
     }
 
     if (!m_conn->commitTransaction(t)) {
