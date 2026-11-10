@@ -29,6 +29,11 @@ void encodeVarint(QByteArray& buffer, quint64 value);
 void encodeFieldKey(QByteArray& buffer, quint32 fieldNum, quint8 wireType);
 
 // -----------------------------------------------------------------------------
+// Append a UTF-8 string as a length-delimited field
+// -----------------------------------------------------------------------------
+void appendStringField(QByteArray& buffer, quint32 fieldNum, const QString& value);
+
+// -----------------------------------------------------------------------------
 // Add varint to buffer
 // -----------------------------------------------------------------------------
 void addVarint(QByteArray& buffer, quint32 fieldNum, quint64 data);
