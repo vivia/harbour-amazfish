@@ -747,6 +747,16 @@ void CommunicatorV2::onWeatherTransferTimeout()
     resetWeatherTransfer();
 }
 
+void CommunicatorV2::sendProtobufResponse(const QByteArray& protobufPayload, quint16 requestId)
+{
+    QSharedPointer<GarminProtobufMessage> reply = mProtobufHandler->prepareProtobufResponse(protobufPayload, requestId);
+    if (reply.isNull()) {
+        qWarning().noquote() << QStringLiteral("Garmin: Failed to prepare protobuf response for request %1").arg(requestId);
+        return;
+    }
+    sendMessage("PROTOBUF RESPONSE", reply->getOutgoingMessage());
+}
+
 void CommunicatorV2::onProtobufMessageReceived( const QByteArray& data)
 {
     qDebug() << Q_FUNC_INFO;
@@ -761,12 +771,25 @@ void CommunicatorV2::onProtobufMessageReceived( const QByteArray& data)
     QSharedPointer<GarminProtobufMessage> parsed = message->parse();
     followup = mProtobufHandler->processIncoming(parsed);
     qDebug() << Q_FUNC_INFO << "Garmin: Sendig Ackbytestream " << parsed->getAckByteStream().toHex();
-    sendMessage("SEND STATUS", parsed->getAckByteStream()); //send status message
+    QByteArray statusStream = parsed->getAckByteStream();
+    if (statusStream.isEmpty()) {
+        // Incomplete protobuf chunks get no protobuf status in Gadgetbridge either;
+        // it answers every incoming GFDI message with a generic Response ACK.
+        // Without that ACK the watch never sends the next chunk and retries the
+        // whole request with a new id forever.
+        QByteArray ack;
+        writeU16le(ack, quint16(MessageId::ProtobufRequest));
+        ack.append(char(Status::Ack));
+        statusStream = wrapInGfdiEnvelope(MessageId::Response, ack);
+    }
+    sendMessage("SEND STATUS", statusStream); // send status message
 
     if (parsed->toSend()) sendMessage("SEND PROTOBUF REPLY", parsed->getMessageBytes()); //send reply if any
 
-    if (!followup.isNull()&& followup->toSend()) sendMessage("SEND PROTOBUF FOLWOW UP", followup->getMessageBytes()); //send followup message if any
-
+    // The followup is the next chunk of a message registered with prepareProtobufMessage,
+    // so it needs the same framing and GFDI envelope as the first chunk.
+    if (!followup.isNull() && followup->toSend())
+        sendMessage("SEND PROTOBUF FOLLOW UP", followup->getOutgoingMessage()); // send followup message if any
 }
 
 void CommunicatorV2::onProtobufStatusMessageReceived(const QByteArray& data)
@@ -781,12 +804,16 @@ void CommunicatorV2::onProtobufStatusMessageReceived(const QByteArray& data)
     qDebug() << Q_FUNC_INFO << "Garmin: Parsed Protobuf Status is " << parsed->getMessageBytes().toHex();
     followup = mProtobufHandler->processIncoming(parsed);
     qDebug() << Q_FUNC_INFO << "Garmin: protobuf ack byte stream is " << parsed->getAckByteStream().toHex();
-    sendMessage("SEND STATUS", parsed->getAckByteStream()); //send status message
+    // Gadgetbridge answers a protobuf status message with nothing, so do not queue
+    // an empty GFDI message when there is no ack to send.
+    if (!parsed->getAckByteStream().isEmpty())
+        sendMessage("SEND STATUS", parsed->getAckByteStream()); // send status message
 
-    if (parsed->toSend()) sendMessage("SEND PROTOBUF REPLY", parsed->getMessageBytes()); //send reply if any
+    if (parsed->toSend() && !parsed->getMessageBytes().isEmpty())
+        sendMessage("SEND PROTOBUF REPLY", parsed->getMessageBytes()); // send reply if any
 
-    if (!followup.isNull()&& followup->toSend()) sendMessage("SEND PROTOBUF FOLWOW UP", followup->getMessageBytes()); //send followup message if any
-
+    if (!followup.isNull() && followup->toSend())
+        sendMessage("SEND PROTOBUF FOLLOW UP", followup->getOutgoingMessage()); // send followup message if any
 }
 
 

@@ -146,6 +146,10 @@ public:
     void sendRawBytes(const QString &label, const QByteArray &bytes);
     void processSendQueue();
     bool sendMessage(const QString& taskName, const QByteArray& message);
+    // Wrap a Smart protobuf payload into a ProtobufResponse (chunked when it is
+    // bigger than the chunk size; continuation chunks are driven by the watch's
+    // protobuf status messages) and queue it for sending.
+    void sendProtobufResponse(const QByteArray& protobufPayload, quint16 requestId);
 
     // Starts a weather exchange: the definitions first, then the records once
     // the watch has applied them. Both payloads come from the device layer.

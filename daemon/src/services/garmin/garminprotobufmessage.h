@@ -77,10 +77,9 @@ public:
     {
         mMessageBytes=data;
         mCommunicator=parent;
-        mMessageType=MessageId::ProtobufResponse;
-
+        mMessageType = MessageId::ProtobufRequest;
     }
-    GarminProtobufMessage(CommunicatorV2 *com, int requestId, int dataOffset, int totalProtobufLength, int protobufDataLength, QByteArray messageBytes, bool sendOutgoing=true);
+    GarminProtobufMessage(CommunicatorV2* com, int requestId, int dataOffset, int totalProtobufLength, int protobufDataLength, QByteArray messageBytes, bool sendOutgoing = true, MessageId messageType = MessageId::ProtobufRequest);
     void setStatusMessage(QSharedPointer<GarminProtobufStatusMessage> protobufStatusMessage);
 
     QSharedPointer<GarminProtobufMessage> parse();
@@ -92,7 +91,6 @@ public:
     bool isComplete();
     int getRequestId() { return mRequestId; };
     CommunicatorV2* getCommunicator() { return mCommunicator; };
-    MessageId getMessageType() {return MessageId::ProtobufRequest; };
     QByteArray getOutgoingMessage();
     QByteArray getAckByteStream();
 

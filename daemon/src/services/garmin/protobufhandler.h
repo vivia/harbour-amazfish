@@ -18,7 +18,9 @@ class GarminDevice;
 class ProtobufFragment
 {
 public:
-    ProtobufFragment(QByteArray fragmentBytes);
+    // The QByteArray ctor is for outgoing messages we want to chunk ourselves;
+    // the MessageId tells the next chunks whether this is a request or a response.
+    ProtobufFragment(QByteArray fragmentBytes, MessageId type = MessageId::ProtobufRequest);
     ProtobufFragment(QSharedPointer<GarminProtobufMessage> message);
     ProtobufFragment(QSharedPointer<ProtobufFragment> existing, QSharedPointer<GarminProtobufMessage> toMerge);
     QSharedPointer<GarminProtobufMessage> getNextChunk(QSharedPointer<GarminProtobufStatusMessage> protobufStatusMessage);
@@ -28,6 +30,7 @@ public:
 private:
     QByteArray mFragmentBytes;
     int mTotalLength = 0;
+    MessageId mMessageType = MessageId::ProtobufRequest;
 };
 
 class ProtobufHandler

@@ -4,8 +4,8 @@
 #include "garminconfigurationmessage.h"
 #include "garminauthnegotiationmessage.h"
 
-
-GarminProtobufMessage::GarminProtobufMessage(CommunicatorV2 *com, int requestId, int dataOffset, int totalProtobufLength, int protobufDataLength, QByteArray messageBytes, bool sendOutgoing) {
+GarminProtobufMessage::GarminProtobufMessage(CommunicatorV2* com, int requestId, int dataOffset, int totalProtobufLength, int protobufDataLength, QByteArray messageBytes, bool sendOutgoing, MessageId messageType)
+{
     mCommunicator = com;
     mRequestId=requestId;
     mDataOffset=dataOffset;
@@ -13,7 +13,7 @@ GarminProtobufMessage::GarminProtobufMessage(CommunicatorV2 *com, int requestId,
     mProtobufDataLength=protobufDataLength;
     mMessageBytes=messageBytes;
     mSendOutgoing=sendOutgoing;
-    mMessageType=MessageId::ProtobufRequest;
+    mMessageType = messageType;
 }
 
 void GarminProtobufMessage::setStatusMessage(QSharedPointer<GarminProtobufStatusMessage> protobufStatusMessage) {
@@ -109,7 +109,7 @@ QByteArray GarminProtobufMessage::getOutgoingMessage(){
     writeU32le(message,mProtobufDataLength);
     message.append(mMessageBytes);
     qDebug() << Q_FUNC_INFO << "Garmin: outgoing protobuf message " << message.toHex();
-    return wrapInGfdiEnvelope(MessageId::ProtobufRequest, message);
+    return wrapInGfdiEnvelope(mMessageType, message);
 }
 
 QByteArray GarminProtobufMessage::getAckByteStream() {
