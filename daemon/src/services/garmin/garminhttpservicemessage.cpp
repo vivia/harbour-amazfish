@@ -1,10 +1,12 @@
 #include "garminhttpservicemessage.h"
 
+#include "garminweatherjson.h"
 #include "protobuftools.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QStringList>
 #include <QtCore/QUrl>
+#include <QtCore/QUrlQuery>
 
 // Field numbers from gdi_http_service.proto.
 // HttpService: webRequest=1, webResponse=2, rawRequest=5, rawResponse=6, showURLNotification=11.
@@ -103,6 +105,13 @@ static bool isOauthPath(const QString& path)
     return path.startsWith(QLatin1String("/api/oauth/"))
         || path.startsWith(QLatin1String("/oauth/"))
         || path.startsWith(QLatin1String("/oauthTokenExchangeService/"));
+}
+
+// The domains Gadgetbridge's WeatherInterceptor serves.
+bool GarminHttpServiceMessage::isWeatherHost(const QString& host)
+{
+    return host == QLatin1String("api.gcs.garmin.com") || host == QLatin1String("api.gcs.garmin.cn")
+        || host == QLatin1String("cache.dciwx.com");
 }
 
 // Same scope set Gadgetbridge sends: the union of its Swim 2, Venu 3 and
@@ -211,9 +220,77 @@ QString GarminHttpServiceMessage::oauthResponseJson(const QString& path, const H
 }
 
 // -----------------------------------------------------------------------------
+// Answer a weather fetch from the phone's weather data, following
+// Gadgetbridge's WeatherInterceptor. Like Gadgetbridge we answer with the
+// location the user picked in Amazfish, not with the lat/lon in the query.
+// -----------------------------------------------------------------------------
+static QString queryValue(const QUrlQuery& query, const QString& key, const QString& fallback)
+{
+    const QString value = query.queryItemValue(key);
+    return value.isEmpty() ? fallback : value;
+}
+
+static int queryIntValue(const QUrlQuery& query, const QString& key, int fallback)
+{
+    bool ok = false;
+    const int value = query.queryItemValue(key).toInt(&ok);
+    return ok ? value : fallback;
+}
+
+void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUrl& url)
+{
+    const QString path = url.path();
+    const CurrentWeather* weather = mCommunicator ? mCommunicator->weatherCache() : nullptr;
+    if (!weather) {
+        // The watch asks again a few seconds later when the answer is an error,
+        // so the fetch started here is often ready by then.
+        qWarning().noquote() << QStringLiteral("Garmin: No weather data for %1, asking for a fetch").arg(path);
+        if (mCommunicator) {
+            mCommunicator->requestWeather();
+        }
+        sendErrorResponse(requestId, false);
+        return;
+    }
+
+    const QUrlQuery query(url);
+    const bool version2 = path.startsWith(QLatin1String("/weather/v2/"));
+    const QString tempUnit = queryValue(query, QStringLiteral("tempUnit"), QStringLiteral("CELSIUS"));
+    const QString speedUnit = queryValue(query, QStringLiteral("speedUnit"), QStringLiteral("METERS_PER_SECOND"));
+    QByteArray json;
+    if (path == QLatin1String("/weather/v1/forecast/day")
+        || path == QLatin1String("/weather/v2/forecast/day")) {
+        json = GarminWeatherJson::dayForecast(weather, queryIntValue(query, QStringLiteral("duration"), 5),
+            tempUnit, version2);
+    } else if (path == QLatin1String("/weather/v1/forecast/hour")
+        || path == QLatin1String("/weather/v2/forecast/hour")) {
+        json = GarminWeatherJson::hourForecast(weather, queryIntValue(query, QStringLiteral("duration"), 13),
+            tempUnit, speedUnit);
+    } else if (path == QLatin1String("/weather/v1/current")
+        || path == QLatin1String("/weather/v2/current")) {
+        json = GarminWeatherJson::current(weather, tempUnit, speedUnit);
+    } else {
+        // pointWinds and the rest have no answer yet; the watch copes with an
+        // error status for those.
+        qWarning().noquote() << QStringLiteral("Garmin: No weather handler for %1").arg(path);
+        sendErrorResponse(requestId, false);
+        return;
+    }
+
+    if (json.isEmpty()) {
+        qWarning().noquote() << QStringLiteral("Garmin: Weather data not usable for %1").arg(path);
+        sendErrorResponse(requestId, false);
+        return;
+    }
+    qDebug().noquote() << QStringLiteral("Garmin: Weather response for %1, %2 bytes")
+                              .arg(path)
+                              .arg(json.size());
+    sendRawResponse(requestId, json);
+}
+
+// -----------------------------------------------------------------------------
 // Parse the content of HttpService (Smart field 2)
 //
-// OAuth token exchanges are answered with fake keys. The rest gets
+// Weather fetches are served from the phone's weather data. The rest gets
 // Gadgetbridge's error status so the watch stops retrying, and the url is
 // logged so the requested endpoints can be studied.
 // -----------------------------------------------------------------------------
@@ -276,6 +353,10 @@ void GarminHttpServiceMessage::parse(const QByteArray& data, quint16 requestId)
             }
             qWarning().noquote() << QStringLiteral("Garmin: No fake OAuth handler for %1 %2")
                                         .arg(request.method, path);
+        }
+        if (isWeatherHost(url.host()) && path.startsWith(QLatin1String("/weather/"))) {
+            handleWeatherRequest(requestId, url);
+            return;
         }
         sendErrorResponse(requestId, false);
     } else if (haveWebRequest) {

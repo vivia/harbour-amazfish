@@ -36,4 +36,6 @@ private:
     void sendErrorResponse(quint16 requestId, bool webRequest);
     void sendRawResponse(quint16 requestId, const QByteArray& body);
     static QString oauthResponseJson(const QString& path, const HttpServiceRequest& request);
+    void handleWeatherRequest(quint16 requestId, const QUrl& url);
+    static bool isWeatherHost(const QString& host);
 };

@@ -205,6 +205,15 @@ public:
     bool isConnected() {return mConnected;};
     bool handshakeComplete() {return !isFirstConnect;};
 
+    // Weather for the endpoints the watch fetches through the HttpService
+    // tunnel. GarminDevice owns the CurrentWeather, this only borrows it.
+    void setWeatherCache(const CurrentWeather* weather) { mWeatherCache = weather; }
+    const CurrentWeather* weatherCache() const { return mWeatherCache; }
+    // A weather endpoint came in while we had no data: ask the device layer
+    // for an update. The watch asks again a few seconds later, and by then a
+    // fresh fetch has often arrived.
+    void requestWeather() { emit weatherRequestReceived(); }
+
 signals:
     void logDebug(const QString& msg);
     void logInfo(const QString& msg);
@@ -312,6 +321,9 @@ private:
     WeatherTransferState mWeatherState = WeatherTransferState::Idle;
     QByteArray mWeatherDataPayload;
     QTimer* mWeatherTimeout = nullptr;
+
+    // Borrowed: GarminDevice::mWeather, owned by DeviceInterface.
+    const CurrentWeather* mWeatherCache = nullptr;
 
     // Last Synchronization (5037) the watch sent; decides what a download may ask for.
     quint8 mSynchronizationType = 0;
