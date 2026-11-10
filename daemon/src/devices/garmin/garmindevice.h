@@ -76,6 +76,7 @@ private:
     bool saveStressData(const QVector<GarminStressSample>& samples);
     bool saveMetricsMessages(const QVector<GarminFitMessage>& messages);
     bool saveVo2maxData(const QVector<GarminVo2maxSample>& samples);
+    void rescanNextFile();
     virtual void refreshInformation() override;
 
     QString mPreferredService;

@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimer>
 
 const char* UUID_SERVICE_GARMIN_GFDI_V0 = "9b012401-bc30-ce9a-e111-0f67e491abde";
 const char* UUID_CHARACTERISTIC_GARMIN_GFDI_V0_SEND = "df334c80-e6a7-d082-274a-78fc66f85e16";
@@ -896,42 +897,66 @@ void GarminDevice::rescanActivityFiles()
     if (dir.isEmpty()) {
         return;
     }
+    if (!mRescanFiles.isEmpty()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: rescan already running";
+        return;
+    }
 
-    int scanned = 0;
-    int saved = 0;
     QDirIterator it(dir, QStringList() << QStringLiteral("*.fit"), QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        it.next();
-        QFile file(it.filePath());
-        if (!file.open(QIODevice::ReadOnly)) {
-            qDebug() << Q_FUNC_INFO << "Garmin: cannot read" << it.filePath();
-            continue;
-        }
-        const QByteArray bytes = file.readAll();
-        file.close();
-
-        QString error;
-        QVector<GarminFitMessage> messages;
-        if (!parseGarminFitFile(bytes, messages, error)) {
-            qDebug() << Q_FUNC_INFO << "Garmin: cannot parse" << it.filePath() << error;
-            continue;
-        }
-        ++scanned;
-        // Sleep and HRV files hold no session, so the activity save refuses them.
-        if (saveActivityMessages(messages)) {
-            ++saved;
-        } else if (saveSleepMessages(messages)) {
-            ++saved;
-        } else if (saveHrvMessages(messages)) {
-            ++saved;
-        } else if (saveMonitorMessages(messages)) {
-            ++saved;
-        } else if (saveMetricsMessages(messages)) {
-            ++saved;
-        }
+        mRescanFiles.append(it.next());
     }
-    qDebug() << Q_FUNC_INFO << "Garmin: rescanned" << dir << ":" << saved << "of" << scanned << "files saved";
-    emit message(tr("Rescanned activity files: %1 of %2 saved").arg(saved).arg(scanned));
+    mRescanTotal = mRescanFiles.size();
+    mRescanScanned = 0;
+    mRescanSaved = 0;
+    qDebug() << Q_FUNC_INFO << "Garmin: rescanning" << mRescanTotal << "files from" << dir;
+
+    // One file per event loop turn. Importing a few hundred files in one go
+    // kept the D-Bus call unanswered long enough for the UI to be killed as
+    // not responding.
+    rescanNextFile();
+}
+
+void GarminDevice::rescanNextFile()
+{
+    if (!mRescanFiles.isEmpty()) {
+        const QString path = mRescanFiles.takeFirst();
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qDebug() << Q_FUNC_INFO << "Garmin: cannot read" << path;
+        } else {
+            const QByteArray bytes = file.readAll();
+            file.close();
+
+            QString error;
+            QVector<GarminFitMessage> messages;
+            if (!parseGarminFitFile(bytes, messages, error)) {
+                qDebug() << Q_FUNC_INFO << "Garmin: cannot parse" << path << error;
+            } else {
+                ++mRescanScanned;
+                // Sleep and HRV files hold no session, so the activity save refuses them.
+                if (saveActivityMessages(messages)) {
+                    ++mRescanSaved;
+                } else if (saveSleepMessages(messages)) {
+                    ++mRescanSaved;
+                } else if (saveHrvMessages(messages)) {
+                    ++mRescanSaved;
+                } else if (saveMonitorMessages(messages)) {
+                    ++mRescanSaved;
+                } else if (saveMetricsMessages(messages)) {
+                    ++mRescanSaved;
+                }
+            }
+        }
+        const int done = mRescanTotal - mRescanFiles.size();
+        emit downloadProgress(done * 100 / mRescanTotal);
+        QTimer::singleShot(0, this, &GarminDevice::rescanNextFile);
+        return;
+    }
+
+    qDebug() << Q_FUNC_INFO << "Garmin: rescanned" << mRescanTotal << "files:" << mRescanSaved
+             << "saved," << mRescanScanned << "parsed";
+    emit message(tr("Rescanned activity files: %1 of %2 saved").arg(mRescanSaved).arg(mRescanScanned));
 }
 
 void GarminDevice::refreshInformation()
