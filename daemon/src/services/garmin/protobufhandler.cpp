@@ -4,6 +4,9 @@
 #include "garminhttpservicemessage.h"
 #include "garminprotobufmessage.h"
 #include "garmintypes.h"
+#include "protobuftools.h"
+
+#include <QtCore/QUuid>
 
 const int MAX_CHUNK_SIZE = 375;
 
@@ -143,6 +146,22 @@ QSharedPointer<GarminProtobufMessage> ProtobufHandler::processIncoming(QSharedPo
                  msg.parse(protobufPayload.mid(1 + lengthBytes), message->getRequestId());
              }
          }
+         if (fieldNumber == 27 && wireType == 2) {
+             // Authentication service. The watch asks for OAuth keys before it uses
+             // the weather records. Answer with fake keys like Gadgetbridge's
+             // "fake OAuth" option, which is documented there to fix weather updates.
+             // Field numbers above 15 have a two byte tag, the length byte follows it.
+             const int tagBytes = (firstTag & 0x80) ? 2 : 1;
+             if (protobufPayload.size() >= tagBytes + 2) {
+                 const quint8 innerLength = quint8(protobufPayload[tagBytes]);
+                 const QByteArray inner = protobufPayload.mid(tagBytes + 1, innerLength);
+                 // AuthenticationService field 1 is the empty OAuthRequest.
+                 if (!inner.isEmpty() && (quint8(inner[0]) >> 3) == 1) {
+                     processed = true;
+                     sendFakeOAuthResponse(message->getRequestId());
+                 }
+             }
+         }
          if (processed) {
              qDebug() << Q_FUNC_INFO << "Garmin: Add ACK with No error";
 
@@ -269,4 +288,69 @@ void ProtobufHandler::reset()
     // Request ids restart at 1 on a new connection, so old fragments must not survive one.
     mChunkedFragmentsMap.clear();
     mLastProtobufRequestId = 0;
+}
+
+static QString randomAlphanumeric(int length)
+{
+    static const char alphabet[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    QString out;
+    while (out.size() < length) {
+        // QUuid is the only random source that works from Qt 5.6 up to Qt 6.
+        const QUuid uuid = QUuid::createUuid();
+        const quint8* bytes = reinterpret_cast<const quint8*>(&uuid);
+        for (int i = 0; i < 16 && out.size() < length; ++i) {
+            out.append(QLatin1Char(alphabet[bytes[i] % (sizeof(alphabet) - 1)]));
+        }
+    }
+    return out;
+}
+
+// Fake OAuth keys. The watch stores them and only checks that they are present,
+// it never uses them against Garmin's servers. The layout mirrors Gadgetbridge:
+// UUID strings for consumerKey and oauthToken, 35 random alphanumerics for the
+// two secrets, region 0 (worldwide).
+void ProtobufHandler::sendFakeOAuthResponse(int requestId)
+{
+    // OAuthKeys: consumerKey=1, consumerSecret=2, oauthToken=3, oauthSecret=4
+    QByteArray keys;
+    appendStringField(keys, 1, uuidString());
+    appendStringField(keys, 2, randomAlphanumeric(35));
+    appendStringField(keys, 3, uuidString());
+    appendStringField(keys, 4, randomAlphanumeric(35));
+
+    // OAuthResponse: keys=1, region=2
+    QByteArray oauthResponse;
+    encodeFieldKey(oauthResponse, 1, 2);
+    encodeVarint(oauthResponse, quint64(keys.size()));
+    oauthResponse.append(keys);
+    encodeFieldKey(oauthResponse, 2, 0);
+    encodeVarint(oauthResponse, 0);
+
+    // AuthenticationService: oauthResponse=2
+    QByteArray authService;
+    encodeFieldKey(authService, 2, 2);
+    encodeVarint(authService, quint64(oauthResponse.size()));
+    authService.append(oauthResponse);
+
+    // Smart: authenticationService=27
+    QByteArray smart;
+    encodeFieldKey(smart, 27, 2);
+    encodeVarint(smart, quint64(authService.size()));
+    smart.append(authService);
+
+    // ProtobufResponse framing, same as the HTTP service response:
+    // requestId LE16, dataOffset LE32 = 0, totalProtobufLength LE32,
+    // protobufDataLength LE32, protobuf bytes.
+    QByteArray message;
+    writeU16le(message, quint16(requestId));
+    writeU32le(message, 0);
+    writeU32le(message, quint32(smart.size()));
+    writeU32le(message, quint32(smart.size()));
+    message.append(smart);
+
+    const QByteArray response = wrapInGfdiEnvelope(MessageId::ProtobufResponse, message);
+    if (mCommunicator) {
+        qDebug() << Q_FUNC_INFO << "Garmin: OUTGOING fake OAuth response" << response.toHex();
+        mCommunicator->sendMessage("OAUTH RESPONSE", response);
+    }
 }

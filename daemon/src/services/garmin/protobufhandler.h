@@ -54,6 +54,7 @@ private:
     int mLastProtobufRequestId = 0;
     CommunicatorV2* mCommunicator;
     void sendAck(QString taskName, QSharedPointer<GarminGfdiMessage> msg);
+    void sendFakeOAuthResponse(int requestId);
     //AppConfigHandler appConfigHandler;
     //HttpHandler httpHandler;
     //DataTransferHandler dataTransferHandler;

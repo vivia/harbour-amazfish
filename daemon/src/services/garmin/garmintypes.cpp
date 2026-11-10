@@ -1,5 +1,6 @@
 #include "garmintypes.h"
 
+#include <QtCore/QUuid>
 /*
  * GarminError
  */
@@ -339,4 +340,13 @@ void writePercent(QByteArray& out, int percent)
         return;
     }
     out.append(char(quint8(qBound(0, percent, 100))));
+}
+
+QString uuidString()
+{
+    // The enum parameter of toString() changed names between Qt versions, so strip
+    // the braces instead. Gadgetbridge sends Java UUID strings, which have none.
+    QString out = QUuid::createUuid().toString();
+    out.remove(QChar('{')).remove(QChar('}'));
+    return out;
 }

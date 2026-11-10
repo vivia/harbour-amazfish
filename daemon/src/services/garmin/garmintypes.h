@@ -462,6 +462,8 @@ void overwriteU16le(QByteArray& out, int off, quint16 v);
 void overwriteU32le(QByteArray& out, int off, quint32 v);
 void overwriteU64le(QByteArray& out, int off, quint64 v);
 
+// Random UUID as plain string without braces, like Java's UUID.toString().
+QString uuidString();
 // Split a directory listing into entries. An entry whose fields are all zero is padding and is
 // dropped. The timestamp is the raw watch value; 0 means the watch sent no date.
 QVector<DirectoryEntry> parseDirectoryEntries(const QByteArray& listing);
