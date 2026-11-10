@@ -84,7 +84,6 @@ private:
     int mRescanTotal = 0;
     int mRescanScanned = 0;
     int mRescanSaved = 0;
-
 };
 
 #endif // GARMIN_DEVICE__H

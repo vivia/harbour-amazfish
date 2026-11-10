@@ -16,6 +16,11 @@ PagePL {
     // does not write it straight back.
     property bool _ready: false
 
+    // The daemon imports one file per event loop turn and reports the share
+    // done via downloadProgress. The page only shows it once it asked.
+    property bool rescanning: false
+    property int rescanPercent: 0
+
     pageMenu: PageMenuPL {
         PageMenuItemPL {
             iconSource: styler.iconRefresh !== undefined ? styler.iconRefresh : ""
@@ -326,8 +331,16 @@ PagePL {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width * 0.8
             onClicked: {
+                rescanPercent = 0;
+                rescanning = true;
                 DaemonInterfaceInstance.rescanActivityFiles();
             }
+        }
+
+        LabelPL {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: rescanning
+            text: qsTr("Rescanning activity files: ") + rescanPercent + "%"
         }
 
         ButtonPL {
@@ -400,6 +413,14 @@ PagePL {
         }
         Connections {
             target: DaemonInterfaceInstance
+            onDownloadProgress: {
+                if (rescanning) {
+                    rescanPercent = percent;
+                    if (percent >= 100) {
+                        rescanning = false;
+                    }
+                }
+            }
             onInformationChanged: {
                 switch (infoKey) {
                     case Amazfish.INFO_SERIAL:
