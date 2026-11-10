@@ -1,7 +1,9 @@
 #include "protobufhandler.h"
 #include "garmincalendarmessage.h"
 #include "garmindevicestatusmessage.h"
+#include "garminhttpservicemessage.h"
 #include "garminprotobufmessage.h"
+#include "garmintypes.h"
 
 const int MAX_CHUNK_SIZE = 375;
 
@@ -128,6 +130,18 @@ QSharedPointer<GarminProtobufMessage> ProtobufHandler::processIncoming(QSharedPo
              qDebug() << Q_FUNC_INFO << "Garmin: Got calendar service message";
              GarminCalendarMessage msg(mCommunicator);
              msg.parse(protobufPayload.mid(2, innerLength), message->getRequestId(), 0);
+         }
+         if (fieldNumber == 2 && wireType == 2) {
+             // HTTP Service, web requests the watch tunnels through the GFDI link.
+             // The length after the tag is a varint, these requests are over 300 bytes.
+             quint64 innerLength;
+             int lengthBytes;
+             if (decodeVarint(protobufPayload.mid(1), innerLength, lengthBytes)) {
+                 processed = true;
+                 qDebug() << Q_FUNC_INFO << "Garmin: Got http service message, length" << innerLength;
+                 GarminHttpServiceMessage msg(mCommunicator);
+                 msg.parse(protobufPayload.mid(1 + lengthBytes), message->getRequestId());
+             }
          }
          if (processed) {
              qDebug() << Q_FUNC_INFO << "Garmin: Add ACK with No error";

@@ -80,13 +80,18 @@ void encodeFieldKey(QByteArray& buffer, quint32 fieldNum, quint8 wireType)
     encodeVarint(buffer, key);
 }
 
+void appendStringField(QByteArray& buffer, quint32 fieldNum, const QString& value)
+{
+    addByteArray(buffer, fieldNum, value.toUtf8());
+}
+
 void addVarint(QByteArray& buffer, quint32 fieldNum, quint64 data)
 {
-    //Adds a Varint to the buffer
-    //First field key is added, then actual data
-    quint8 wireType=0;
-    encodeFieldKey(buffer,fieldNum,wireType);
-    encodeVarint(buffer,data);
+    // Adds a Varint to the buffer
+    // First field key is added, then actual data
+    quint8 wireType = 0;
+    encodeFieldKey(buffer, fieldNum, wireType);
+    encodeVarint(buffer, data);
 }
 
 void addByteArray(QByteArray& buffer, quint32 fieldNum, const QByteArray data)
