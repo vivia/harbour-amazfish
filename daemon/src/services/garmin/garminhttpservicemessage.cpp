@@ -96,10 +96,126 @@ void GarminHttpServiceMessage::parseRawRequest(const QByteArray& data, HttpServi
 }
 
 // -----------------------------------------------------------------------------
+// Fake OAuth answers, following Gadgetbridge OauthInterceptor
+// -----------------------------------------------------------------------------
+static bool isOauthPath(const QString& path)
+{
+    return path.startsWith(QLatin1String("/api/oauth/"))
+        || path.startsWith(QLatin1String("/oauth/"))
+        || path.startsWith(QLatin1String("/oauthTokenExchangeService/"));
+}
+
+// Same scope set Gadgetbridge sends: the union of its Swim 2, Venu 3 and
+// Enduro 3 lists, duplicates dropped, first occurrence kept.
+static const QStringList& oauthScopes()
+{
+    static const char* const scopes[] = {
+        // Swim 2
+        "GCS_EPHEMERIS_SONY_READ",
+        // Venu 3
+        "GCS_CIQ_APPSTORE_MOBILE_READ",
+        "GCS_EMERGENCY_ASSISTANCE_CREATE",
+        "GCS_GEOLOCATION_ELEVATION_READ",
+        "GCS_IMAGE_READ",
+        "GCS_LIVETRACK_FIT_CREATE",
+        "GCS_LIVETRACK_FIT_READ",
+        "GCS_LIVETRACK_FIT_UPDATE",
+        "OMT_GOLF_SUBSCRIPTION_READ",
+        "OMT_SUBSCRIPTION_READ",
+        // Enduro 3
+        "CSE_CDS_ACCOUNT_READ",
+        "GCS_DEVICE_INSTRUCTION_OUTDOOR_READ",
+        "GCS_IMAGE_STORAGE_READ",
+        "GCS_LIVE_EVENT_SHARING_CREATE",
+        "GCS_LTE_SIGNAL_UPDATE",
+        "GCS_MESSAGING_FITNESS_CREATE",
+        "GCS_MESSAGING_FITNESS_READ",
+        "GCS_MESSAGING_FITNESS_UPDATE",
+        "GCS_STOCKS_READ",
+        "GCS_TIDE_READ",
+        "GCS_WEATHER_RACEDAY_READ",
+        "MARINE_SERVER_ACCESS",
+        "MARINE_SERVER_CHARTS_SUBSCRIPTION_READ",
+        "MARINE_SERVER_CHARTS_SUBSCRIPTION_WRITE",
+        "OMT_BIRDSEYE_READ",
+        "OMT_OUTDOOR_MAP_SUBSCRIPTION_CREATE",
+        "OMT_OUTDOOR_MAP_SUBSCRIPTION_DELETE",
+        "OMT_OUTDOOR_MAP_SUBSCRIPTION_READ",
+        "YAR_BILLING_SUBSCRIBER_READ",
+        "YAR_INREACH_HERMES_READ",
+        "YAR_INREACH_IRIS_CREATE",
+        "YAR_INREACH_IRIS_READ",
+        "YAR_INREACH_IRIS_UPDATE",
+        "YAR_INREACH_VOICE_EVENT_CREATE",
+    };
+    static QStringList list;
+    if (list.isEmpty()) {
+        for (const char* const scope : scopes) {
+            list << QLatin1String(scope);
+        }
+    }
+    return list;
+}
+
+static QString quoted(const QString& value)
+{
+    return QLatin1Char('"') + value + QLatin1Char('"');
+}
+
+// connectToIT / connect_exchange: Gadgetbridge writes the fields of its
+// AuthorizationResponse in declaration order, refreshTokenExpiresIn as a string.
+static QString authorizationResponseJson()
+{
+    return QStringLiteral("{\"accessToken\":%1,\"tokenType\":\"Bearer\",\"refreshToken\":%2,"
+                          "\"expiresIn\":7776000,\"scope\":\"%3\",\"refreshTokenExpiresIn\":\"31536000\","
+                          "\"customerId\":%4}")
+        .arg(quoted(uuidString()), quoted(uuidString()),
+            oauthScopes().join(QLatin1Char(' ')), quoted(uuidString()));
+}
+
+// /api/oauth/token and /oauth/refresh_token/token: Gadgetbridge keeps the
+// refresh token from the request body when it can, and writes RefreshResponse
+// fields in declaration order (customerId stays camelCase there).
+static QString refreshResponseJson(const HttpServiceRequest& request)
+{
+    QString refreshToken;
+    for (const QString& param : request.rawBody.split(QLatin1Char('&'))) {
+        const QStringList parts = param.split(QLatin1Char('='));
+        if (parts.size() == 2 && parts.at(0) == QLatin1String("refresh_token")) {
+            refreshToken = parts.at(1);
+            break;
+        }
+    }
+    if (refreshToken.isEmpty()) {
+        qWarning().noquote() << QStringLiteral("Garmin: oauth refresh request has no refresh_token, using a new one");
+        refreshToken = uuidString();
+    }
+
+    return QStringLiteral("{\"access_token\":%1,\"token_type\":\"Bearer\",\"expires_in\":7776000,"
+                          "\"scope\":\"%2\",\"refresh_token\":%3,\"refresh_token_expires_in\":\"31536000\","
+                          "\"customerId\":%4}")
+        .arg(quoted(uuidString()), oauthScopes().join(QLatin1Char(' ')),
+            quoted(refreshToken), quoted(uuidString()));
+}
+
+QString GarminHttpServiceMessage::oauthResponseJson(const QString& path, const HttpServiceRequest& request)
+{
+    if (path == QLatin1String("/oauthTokenExchangeService/connectToIT")
+        || path == QLatin1String("/oauth/connect_exchange/token")) {
+        return authorizationResponseJson();
+    }
+    if (path == QLatin1String("/api/oauth/token") || path == QLatin1String("/oauth/refresh_token/token")) {
+        return refreshResponseJson(request);
+    }
+    return QString();
+}
+
+// -----------------------------------------------------------------------------
 // Parse the content of HttpService (Smart field 2)
 //
-// Every request gets Gadgetbridge's error status so the watch stops retrying,
-// and the url is logged so the requested endpoints can be studied.
+// OAuth token exchanges are answered with fake keys. The rest gets
+// Gadgetbridge's error status so the watch stops retrying, and the url is
+// logged so the requested endpoints can be studied.
 // -----------------------------------------------------------------------------
 void GarminHttpServiceMessage::parse(const QByteArray& data, quint16 requestId)
 {
@@ -145,6 +261,22 @@ void GarminHttpServiceMessage::parse(const QByteArray& data, quint16 requestId)
     }
 
     if (haveRawRequest) {
+        const QUrl url(request.url);
+        const QString path = url.path();
+        if (isOauthPath(path)) {
+            if (request.method == QLatin1String("POST")) {
+                const QString json = oauthResponseJson(path, request);
+                if (!json.isEmpty()) {
+                    qDebug().noquote() << QStringLiteral("Garmin: Fake OAuth response for %1, %2 bytes")
+                                              .arg(path)
+                                              .arg(json.toUtf8().size());
+                    sendRawResponse(requestId, json.toUtf8());
+                    return;
+                }
+            }
+            qWarning().noquote() << QStringLiteral("Garmin: No fake OAuth handler for %1 %2")
+                                        .arg(request.method, path);
+        }
         sendErrorResponse(requestId, false);
     } else if (haveWebRequest) {
         sendErrorResponse(requestId, true);

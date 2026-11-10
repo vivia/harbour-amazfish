@@ -35,4 +35,5 @@ private:
     void parseRawRequest(const QByteArray& data, HttpServiceRequest& request);
     void sendErrorResponse(quint16 requestId, bool webRequest);
     void sendRawResponse(quint16 requestId, const QByteArray& body);
+    static QString oauthResponseJson(const QString& path, const HttpServiceRequest& request);
 };
