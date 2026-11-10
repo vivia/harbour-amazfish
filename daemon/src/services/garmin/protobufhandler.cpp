@@ -1,7 +1,7 @@
 #include "protobufhandler.h"
-#include "garminprotobufmessage.h"
-#include "garmindevicestatusmessage.h"
 #include "garmincalendarmessage.h"
+#include "garmindevicestatusmessage.h"
+#include "garminprotobufmessage.h"
 
 const int MAX_CHUNK_SIZE = 375;
 
@@ -11,10 +11,11 @@ const int MAX_TOTAL_PROTOBUF_LENGTH = 256 * 1024;
 // Number of transfers that may wait in mChunkedFragmentsMap at the same time.
 const int MAX_OPEN_TRANSFERS = 8;
 
-ProtobufFragment::ProtobufFragment(QByteArray fragmentBytes)
+ProtobufFragment::ProtobufFragment(QByteArray fragmentBytes, MessageId type)
 {
     mFragmentBytes=fragmentBytes;
     mTotalLength = fragmentBytes.size();
+    mMessageType = type;
 }
 
 ProtobufFragment::ProtobufFragment(QSharedPointer<GarminProtobufMessage> message)
@@ -26,6 +27,7 @@ ProtobufFragment::ProtobufFragment(QSharedPointer<GarminProtobufMessage> message
     }
     mFragmentBytes = message->getMessageBytes();
     mTotalLength = message->getTotalProtobufLength();
+    mMessageType = message->getMessageType();
 }
 
 ProtobufFragment::ProtobufFragment(QSharedPointer<ProtobufFragment> existing, QSharedPointer<GarminProtobufMessage> toMerge)
@@ -38,6 +40,7 @@ ProtobufFragment::ProtobufFragment(QSharedPointer<ProtobufFragment> existing, QS
     mFragmentBytes=existing->getFragmentBytes();
     mFragmentBytes.append(toMerge->getMessageBytes());
     mTotalLength=existing->getTotalLength(); // Check if this is correct - could be mFragementbytes.size?
+    mMessageType = existing->mMessageType;
 }
 
 
@@ -51,11 +54,13 @@ QSharedPointer<GarminProtobufMessage> ProtobufFragment::getNextChunk(QSharedPoin
     int length = std::min(MAX_CHUNK_SIZE, mFragmentBytes.size() - start);
 
     return QSharedPointer<GarminProtobufMessage>(new GarminProtobufMessage(protobufStatusMessage->getCommunicator(),
-            protobufStatusMessage->getRequestId(),
-            start,
-            mTotalLength,
-            length,
-            mFragmentBytes.mid(start, start + length)));
+        protobufStatusMessage->getRequestId(),
+        start,
+        mTotalLength,
+        length,
+        mFragmentBytes.mid(start, length),
+        true,
+        mMessageType));
 }
 
 
@@ -152,8 +157,15 @@ QSharedPointer<GarminProtobufMessage> ProtobufHandler::processIncoming(QSharedPo
 }
 
 QSharedPointer<GarminProtobufMessage> ProtobufHandler::processIncoming(QSharedPointer<GarminProtobufStatusMessage> message) {
-    //Todo: inform DataTransferhandler
-    //DataTransferHandler->onDataChunkSuccessfullyReceived(message->getRequestId())
+    // Todo: inform DataTransferhandler
+    // DataTransferHandler->onDataChunkSuccessfullyReceived(message->getRequestId())
+    //  Only an OK status means the chunk the watch named was kept. The Lily 2 also
+    //  reports DUPLICATE_PACKET for offsets it has seen before; answering those
+    //  re-sends a chunk the watch already has, and it complains again.
+    if (!message->isOK()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Protobuf status not OK, chunk" << int(message->getProtobufChunkStatus()) << "code" << int(message->getProtobufStatusCode());
+        return QSharedPointer<GarminProtobufMessage>();
+    }
     if (mChunkedFragmentsMap.contains(message->getRequestId())) {
         QSharedPointer<ProtobufFragment> fragment = mChunkedFragmentsMap.value(message->getRequestId());
         if (fragment->getTotalLength() <= (message->getDataOffset() + mMaxChunkSize)) {
@@ -225,15 +237,17 @@ QSharedPointer<GarminProtobufMessage> ProtobufHandler::prepareProtobufMessage(QB
         return QSharedPointer<GarminProtobufMessage>();
 
     if (bytes.size() > mMaxChunkSize) {
-        mChunkedFragmentsMap.insert(requestId, QSharedPointer<ProtobufFragment>(new ProtobufFragment(bytes)));
+        mChunkedFragmentsMap.insert(requestId, QSharedPointer<ProtobufFragment>(new ProtobufFragment(bytes, type)));
         return QSharedPointer<GarminProtobufMessage>(new GarminProtobufMessage(mCommunicator,
-                requestId,
-                0,
-                bytes.size(),
-                mMaxChunkSize,
-                bytes.mid(0, mMaxChunkSize)));
+            requestId,
+            0,
+            bytes.size(),
+            mMaxChunkSize,
+            bytes.mid(0, mMaxChunkSize),
+            true,
+            type));
     }
-    return QSharedPointer<GarminProtobufMessage>(new GarminProtobufMessage(mCommunicator, requestId, 0, bytes.size(), bytes.size(), bytes));
+    return QSharedPointer<GarminProtobufMessage>(new GarminProtobufMessage(mCommunicator, requestId, 0, bytes.size(), bytes.size(), bytes, true, type));
 }
 
 void ProtobufHandler::reset()
