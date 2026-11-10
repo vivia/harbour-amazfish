@@ -59,6 +59,7 @@ private:
     void sendWeatherToWatch();
     void onActivityFileParsed(qint32 fileStamp, const QVector<GarminFitMessage>& messages);
     bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
+    void rescanNextFile();
     virtual void refreshInformation() override;
 
     QString mPreferredService;
@@ -75,6 +76,14 @@ private:
     QSharedPointer<GarminNotificationHandler> mNotificationHandler;
     QSharedPointer<ProtobufHandler> mProtobufHandler;
     QSharedPointer<CommunicatorV2> mCommunicator;
+
+    // Rescan state. Files wait in mRescanFiles and go one per event loop
+    // turn so the daemon answers D-Bus in between. An empty list also means
+    // "no rescan running".
+    QStringList mRescanFiles;
+    int mRescanTotal = 0;
+    int mRescanScanned = 0;
+    int mRescanSaved = 0;
 
 };
 
