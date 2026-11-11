@@ -656,6 +656,32 @@ void DeviceInterface::createTables()
         qDebug() << *t_vo2max;
     }
 
+    if (!m_conn->containsTable("daily_calories")) {
+        KDbTableSchema* t_dailycalories = new KDbTableSchema("daily_calories");
+        t_dailycalories->setCaption("Daily calories");
+
+        t_dailycalories->addField(f = new KDbField("daily_calories_id", KDbField::Integer, KDbField::PrimaryKey | KDbField::AutoInc, KDbField::Unsigned));
+        f->setCaption("ID");
+
+        // One row per day of the watch. Unique so a retry cannot add a
+        // second row for the same day.
+        t_dailycalories->addField(f = new KDbField("daily_calories_date", KDbField::Date, KDbField::Indexed | KDbField::Unique));
+        f->setCaption("Day");
+
+        t_dailycalories->addField(f = new KDbField("daily_calories_active", KDbField::Integer));
+        f->setCaption("Active Calories");
+
+        t_dailycalories->addField(f = new KDbField("daily_calories_rmr", KDbField::Integer));
+        f->setCaption("Resting Metabolic Rate");
+
+        if (!m_conn->createTable(t_dailycalories)) {
+            qDebug() << m_conn->result();
+            return;
+        }
+        qDebug() << "-- daily_calories created --";
+        qDebug() << *t_dailycalories;
+    }
+
     if (!m_conn->containsTable("sleep")) {
         KDbTableSchema* t_sleep = new KDbTableSchema("sleep");
         t_sleep->setCaption("Sleep Stages");
@@ -728,6 +754,7 @@ void DeviceInterface::createTables()
         { "stress", "stress_timestamp" },
         { "stress", "stress_timestamp_dt" },
         { "vo2max", "vo2max_timestamp" },
+        { "daily_calories", "daily_calories_date" },
         { "sleep", "sleep_timestamp" },
         { "sleep_assessment", "sleep_assessment_timestamp" },
         { "pai", "pai_date" },
