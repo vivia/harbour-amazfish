@@ -333,11 +333,11 @@ QString conditionName(int owmCode)
 // One day record. sunrise and sunset are 0 when unknown and left out, as
 // Gadgetbridge leaves its null fields out. The API has no sun times per day,
 // so only today carries them; Gadgetbridge computes the rest with SolarEvents.
-// No wind record at all: CurrentWeather keeps the daily wind extremes in
-// uint8 fields that overflow (windMin stays 255, see the FIT weather path).
+// The wind object is empty when the day has no usable wind data.
 QJsonObject dayEntry(const QDate& date, const QString& description, qreal minKelvin,
     qreal maxKelvin, int precipProb, int humidity, int conditionCode,
-    qlonglong sunrise, qlonglong sunset, const QString& tempUnit, bool version2)
+    qlonglong sunrise, qlonglong sunset, const QString& tempUnit, bool version2,
+    const QJsonObject& wind)
 {
     QJsonObject entry;
     // v1 counts 1 = Sunday .. 7 = Saturday; v2 counts 1 = Monday .. 7 =
@@ -356,7 +356,34 @@ QJsonObject dayEntry(const QDate& date, const QString& description, qreal minKel
         entry.insert(QStringLiteral("epochSunset"), double(sunset));
     }
     entry.insert(QStringLiteral("humidity"), humidity);
+    if (!wind.isEmpty()) {
+        entry.insert(QStringLiteral("wind"), wind);
+    }
     return entry;
+}
+
+// Gadgetbridge takes the day wind from its provider's daily forecast. Our
+// CurrentWeather daily extremes sit in uint8 fields that overflow (windMin
+// stays 255, see the FIT weather path), so fold the day's strongest hourly
+// entry instead.
+QJsonObject dayWind(const CurrentWeather* weather, const QDate& day, const QString& unit)
+{
+    qreal bestSpeed = -1;
+    qreal bestDirection = 0;
+    for (int i = 0; i < weather->hourCount(); ++i) {
+        const CurrentWeather::Hour& hour = weather->hour(i);
+        if (QDateTime::fromMSecsSinceEpoch(hour.dateTime() * 1000).date() != day) {
+            continue;
+        }
+        if (hour.windSpeed() > bestSpeed) {
+            bestSpeed = hour.windSpeed();
+            bestDirection = hour.windDirection();
+        }
+    }
+    if (bestSpeed < 0) {
+        return QJsonObject();
+    }
+    return windValue(bestSpeed, bestDirection, unit);
 }
 
 // OpenWeather reports no precipitation probability for current conditions, so
@@ -377,7 +404,7 @@ int todayPrecipProbability(const CurrentWeather* weather, const QDate& day)
 } // namespace
 
 QByteArray GarminWeatherJson::dayForecast(const CurrentWeather* weather, int duration,
-    const QString& tempUnit, bool version2)
+    const QString& tempUnit, const QString& speedUnit, bool version2)
 {
     if (!haveWeather(weather) || duration <= 0) {
         return QByteArray();
@@ -388,10 +415,12 @@ QByteArray GarminWeatherJson::dayForecast(const CurrentWeather* weather, int dur
     // and date the series from the data's own timestamp.
     const QDate base = QDateTime::fromMSecsSinceEpoch(weather->dateTime() * 1000).date();
     QJsonArray days;
+    // Today takes the current wind, like Gadgetbridge's todayAsDaily().
     days.append(dayEntry(base, weather->description(), weather->minTemperature(),
         weather->maxTemperature(), todayPrecipProbability(weather, base),
         weather->humidity(), weather->weatherCode(),
-        weather->sunrise(), weather->sunset(), tempUnit, version2));
+        weather->sunrise(), weather->sunset(), tempUnit, version2,
+        windValue(weather->windSpeed(), weather->windDeg(), speedUnit)));
 
     // Gadgetbridge answers duration entries in total: today plus duration-1
     // forecast days.
@@ -410,7 +439,8 @@ QByteArray GarminWeatherJson::dayForecast(const CurrentWeather* weather, int dur
         }
         days.append(dayEntry(base.addDays(i + 1), description, f.minTemperature(),
             f.maxTemperature(), precipProb, int(f.humidity()),
-            f.weatherCode(), 0, 0, tempUnit, version2));
+            f.weatherCode(), 0, 0, tempUnit, version2,
+            dayWind(weather, base.addDays(i + 1), speedUnit)));
     }
     return QJsonDocument(days).toJson(QJsonDocument::Compact);
 }

@@ -280,8 +280,12 @@ void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUr
     QByteArray json;
     if (path == QLatin1String("/weather/v1/forecast/day")
         || path == QLatin1String("/weather/v2/forecast/day")) {
+        // The day query carries no speedUnit, and Gadgetbridge then answers
+        // KILOMETERS_PER_HOUR. Keep that default only for this endpoint.
+        const QString daySpeedUnit
+            = queryValue(query, QStringLiteral("speedUnit"), QStringLiteral("KILOMETERS_PER_HOUR"));
         json = GarminWeatherJson::dayForecast(weather, queryIntValue(query, QStringLiteral("duration"), 5),
-            tempUnit, version2);
+            tempUnit, daySpeedUnit, version2);
     } else if (path == QLatin1String("/weather/v1/forecast/hour")
         || path == QLatin1String("/weather/v2/forecast/hour")) {
         json = GarminWeatherJson::hourForecast(weather, queryIntValue(query, QStringLiteral("duration"), 13),
