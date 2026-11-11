@@ -83,6 +83,7 @@ PagePL {
         }
         LabelPL {
             id: lblGPSVer
+            visible: DaemonInterfaceInstance.information(Amazfish.INFO_GPSVER) != ""
             text: qsTr("GPS Ver: ") + DaemonInterfaceInstance.information(Amazfish.INFO_GPSVER)
             color: styler.themeSecondaryHighlightColor
         }
@@ -434,6 +435,7 @@ PagePL {
                     break;
                     case Amazfish.INFO_GPSVER:
                     lblGPSVer.text = qsTr("GPS Ver: ") +infoValue;
+                    lblGPSVer.visible = infoValue != "";
                     break;
                     case Amazfish.INFO_MODEL:
                     lblModel.text = qsTr("Model: ") +infoValue;
