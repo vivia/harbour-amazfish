@@ -8,6 +8,7 @@
         <file alias="./qml/components/platform/ComboBoxPL.qml">./qml/components/platform.kirigami/ComboBoxPL.qml</file>
         <file alias="./qml/components/platform/ContextMenuItemPL.qml">./qml/components/platform.kirigami/ContextMenuItemPL.qml</file>
         <file alias="./qml/components/platform/ContextMenuPL.qml">./qml/components/platform.kirigami/ContextMenuPL.qml</file>
+        <file alias="./qml/components/platform/CopyLabelPL.qml">./qml/components/platform.kirigami/CopyLabelPL.qml</file>
         <file alias="./qml/components/platform/DatePickerDialogPL.qml">./qml/components/platform.kirigami/DatePickerDialogPL.qml</file>
         <file alias="./qml/components/platform/DialogAutoPL.qml">./qml/components/platform.kirigami/DialogAutoPL.qml</file>
         <file alias="./qml/components/platform/DialogListPL.qml">./qml/components/platform.kirigami/DialogListPL.qml</file>

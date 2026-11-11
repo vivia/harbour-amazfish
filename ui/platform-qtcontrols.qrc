@@ -8,6 +8,7 @@
         <file alias="./qml/components/platform/ComboBoxPL.qml">./qml/components/platform.qtcontrols/ComboBoxPL.qml</file>
         <file alias="./qml/components/platform/ContextMenuItemPL.qml">./qml/components/platform.qtcontrols/ContextMenuItemPL.qml</file>
         <file alias="./qml/components/platform/ContextMenuPL.qml">./qml/components/platform.qtcontrols/ContextMenuPL.qml</file>
+        <file alias="./qml/components/platform/CopyLabelPL.qml">./qml/components/platform.qtcontrols/CopyLabelPL.qml</file>
         <file alias="./qml/components/platform/DatePickerDialogPL.qml">./qml/components/platform.qtcontrols/DatePickerDialogPL.qml</file>
         <file alias="./qml/components/platform/DialogAutoPL.qml">./qml/components/platform.qtcontrols/DialogAutoPL.qml</file>
         <file alias="./qml/components/platform/DialogListPL.qml">./qml/components/platform.qtcontrols/DialogListPL.qml</file>

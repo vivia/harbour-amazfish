@@ -21,6 +21,11 @@ PagePL {
     property bool rescanning: false
     property int rescanPercent: 0
 
+    // Endpoints Garmin serves the aGPS files from, the same URLs the watch
+    // asks for. Gadgetbridge shows them in its watch settings, Location.
+    readonly property string agps7daysUrl: "https://api.gcs.garmin.com/ephemeris/cpe/rxnetworks/bytes?coverage=DAYS_7"
+    readonly property string agpsConstellationsUrl: "https://api.gcs.garmin.com/ephemeris/cpe/mtk/constellations?coverage=DAYS_7&constellations=GPS"
+
     pageMenu: PageMenuPL {
         PageMenuItemPL {
             iconSource: styler.iconRefresh !== undefined ? styler.iconRefresh : ""
@@ -85,6 +90,44 @@ PagePL {
             id: lblGPSVer
             visible: DaemonInterfaceInstance.information(Amazfish.INFO_GPSVER) != ""
             text: qsTr("GPS Ver: ") + DaemonInterfaceInstance.information(Amazfish.INFO_GPSVER)
+            color: styler.themeSecondaryHighlightColor
+        }
+        LabelPL {
+            id: lblAgps7days
+            visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS)
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: qsTr("aGPS 7days: ") + DaemonInterfaceInstance.information(Amazfish.INFO_AGPS_7DAYS)
+            color: styler.themeSecondaryHighlightColor
+        }
+        CopyLabelPL {
+            id: urlAgps7days
+            visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS)
+            text: agps7daysUrl
+            color: styler.themeSecondaryHighlightColor
+            onCopied: agpsMarkCopied()
+        }
+        LabelPL {
+            id: lblAgpsConstellations
+            visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS)
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: qsTr("aGPS constellations: ") + DaemonInterfaceInstance.information(Amazfish.INFO_AGPS_CONSTELLATIONS)
+            color: styler.themeSecondaryHighlightColor
+        }
+        CopyLabelPL {
+            id: urlAgpsConstellations
+            visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS)
+            text: agpsConstellationsUrl
+            color: styler.themeSecondaryHighlightColor
+            onCopied: agpsMarkCopied()
+        }
+        LabelPL {
+            id: agpsCopyHint
+            visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS) && urlAgps7days.copyable
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: qsTr("Tap a URL to copy it")
             color: styler.themeSecondaryHighlightColor
         }
 
@@ -437,6 +480,12 @@ PagePL {
                     lblGPSVer.text = qsTr("GPS Ver: ") +infoValue;
                     lblGPSVer.visible = infoValue != "";
                     break;
+                    case Amazfish.INFO_AGPS_7DAYS:
+                    lblAgps7days.text = qsTr("aGPS 7days: ") + infoValue;
+                    break;
+                    case Amazfish.INFO_AGPS_CONSTELLATIONS:
+                    lblAgpsConstellations.text = qsTr("aGPS constellations: ") + infoValue;
+                    break;
                     case Amazfish.INFO_MODEL:
                     lblModel.text = qsTr("Model: ") +infoValue;
                     break;
@@ -452,6 +501,16 @@ PagePL {
 
     }
 
+    function agpsMarkCopied() {
+        agpsCopyHint.text = qsTr("Copied")
+        agpsCopyHintTimer.restart()
+    }
+
+    Timer {
+        id: agpsCopyHintTimer
+        interval: 2000
+        onTriggered: agpsCopyHint.text = qsTr("Tap a URL to copy it")
+    }
 
 Component.onCompleted: {
     DaemonInterfaceInstance.refreshInformation();
