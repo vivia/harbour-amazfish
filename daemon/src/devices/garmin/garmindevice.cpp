@@ -409,12 +409,15 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
         QVector<GarminMonitorSample> samples;
         QVector<GarminSpo2Sample> spo2Samples;
         QVector<GarminStressSample> stressSamples;
+        QVector<GarminDailyCaloriesSample> caloriesSamples;
         buildGarminMonitorSamples(messages, samples);
         buildGarminSpo2Samples(messages, spo2Samples);
         buildGarminStressSamples(messages, stressSamples);
-        if (samples.isEmpty() && spo2Samples.isEmpty() && stressSamples.isEmpty()) {
-            // No heart rate, no step movement, no blood oxygen and no stress:
-            // nothing to store, but the file is done with. Advance the stamp.
+        buildGarminDailyCaloriesSamples(messages, caloriesSamples);
+        if (samples.isEmpty() && spo2Samples.isEmpty() && stressSamples.isEmpty() && caloriesSamples.isEmpty()) {
+            // No heart rate, no step movement, no blood oxygen, no stress and
+            // no calories: nothing to store, but the file is done with.
+            // Advance the stamp.
             qDebug() << Q_FUNC_INFO << "Garmin: monitor file has no samples, skipping";
             AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
             return;
@@ -427,6 +430,9 @@ void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const
             saved = false;
         }
         if (!stressSamples.isEmpty() && !saveStressData(stressSamples)) {
+            saved = false;
+        }
+        if (!caloriesSamples.isEmpty() && !saveDailyCaloriesData(caloriesSamples)) {
             saved = false;
         }
         // Move the stamp only when every domain the file offered is stored.
@@ -672,6 +678,11 @@ bool GarminDevice::saveMonitorMessages(const QVector<GarminFitMessage>& messages
     if (buildGarminStressSamples(messages, stressSamples)) {
         saved = saveStressData(stressSamples) || saved;
     }
+
+    QVector<GarminDailyCaloriesSample> caloriesSamples;
+    if (buildGarminDailyCaloriesSamples(messages, caloriesSamples)) {
+        saved = saveDailyCaloriesData(caloriesSamples) || saved;
+    }
     return saved;
 }
 
@@ -839,6 +850,87 @@ bool GarminDevice::saveStressData(const QVector<GarminStressSample>& samples)
 
     tg.commit();
     qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "stress readings";
+    return true;
+}
+
+bool GarminDevice::saveDailyCaloriesData(const QVector<GarminDailyCaloriesSample>& samples)
+{
+    if (!m_conn || !m_conn->isDatabaseUsed()) {
+        qDebug() << Q_FUNC_INFO << "Garmin: Database not connected";
+        return false;
+    }
+    if (samples.isEmpty()) {
+        return false;
+    }
+
+    auto caloriesTable = m_conn->tableSchema("daily_calories");
+    if (!caloriesTable) {
+        qDebug() << Q_FUNC_INFO << "Garmin: daily_calories table missing";
+        return false;
+    }
+
+    KDbTransaction transaction = m_conn->beginTransaction();
+    KDbTransactionGuard tg(transaction);
+
+    for (const GarminDailyCaloriesSample& sample : samples) {
+        if (sample.activeCalories < 0 && sample.restingMetabolicRate < 0) {
+            continue;
+        }
+        const KDbEscapedString day = m_conn->escapeString(sample.day.toString(Qt::ISODate));
+        int rowId = 0;
+        const auto foundRow = m_conn->querySingleNumber(
+            KDbEscapedString("SELECT daily_calories_id FROM daily_calories WHERE daily_calories_date = %1").arg(day),
+            &rowId);
+        if (foundRow != true) {
+            // No row for this day yet: create it with the parts this file
+            // carried. The unique date column keeps a retry from adding a
+            // second row.
+            KDbFieldList fields;
+            QList<QVariant> values;
+            fields.addField(caloriesTable->field("daily_calories_date"));
+            values << sample.day.toString(Qt::ISODate);
+            if (sample.activeCalories >= 0) {
+                fields.addField(caloriesTable->field("daily_calories_active"));
+                values << sample.activeCalories;
+            }
+            if (sample.restingMetabolicRate >= 0) {
+                fields.addField(caloriesTable->field("daily_calories_rmr"));
+                values << sample.restingMetabolicRate;
+            }
+            if (!m_conn->insertRecord(&fields, values)) {
+                qDebug() << Q_FUNC_INFO << "Garmin: error inserting daily calories row";
+                return false;
+            }
+            continue;
+        }
+        // Files are cut at sync times, so later files know more of the same
+        // day. The counters only grow: keep the higher value. The IS NULL arm
+        // covers a row created from the basal value alone.
+        if (sample.activeCalories >= 0) {
+            if (!m_conn->executeSql(KDbEscapedString("UPDATE daily_calories SET daily_calories_active = %2 "
+                                                     "WHERE daily_calories_date = %1 AND (daily_calories_active IS NULL "
+                                                     "OR daily_calories_active < %2)")
+                                        .arg(day)
+                                        .arg(sample.activeCalories))) {
+                qDebug() << Q_FUNC_INFO << "Garmin: could not update active calories for" << sample.day;
+                return false;
+            }
+        }
+        // The basal value only changes with the user profile: the newest file
+        // wins.
+        if (sample.restingMetabolicRate >= 0) {
+            if (!m_conn->executeSql(KDbEscapedString("UPDATE daily_calories SET daily_calories_rmr = %2 "
+                                                     "WHERE daily_calories_date = %1")
+                                        .arg(day)
+                                        .arg(sample.restingMetabolicRate))) {
+                qDebug() << Q_FUNC_INFO << "Garmin: could not update resting metabolic rate for" << sample.day;
+                return false;
+            }
+        }
+    }
+
+    tg.commit();
+    qDebug() << Q_FUNC_INFO << "Garmin: saved" << samples.size() << "daily calories rows";
     return true;
 }
 

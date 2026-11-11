@@ -74,6 +74,7 @@ private:
     bool saveMonitorData(const QVector<GarminMonitorSample>& samples);
     bool saveSpo2Data(const QVector<GarminSpo2Sample>& samples);
     bool saveStressData(const QVector<GarminStressSample>& samples);
+    bool saveDailyCaloriesData(const QVector<GarminDailyCaloriesSample>& samples);
     bool saveMetricsMessages(const QVector<GarminFitMessage>& messages);
     bool saveVo2maxData(const QVector<GarminVo2maxSample>& samples);
     void rescanNextFile();
