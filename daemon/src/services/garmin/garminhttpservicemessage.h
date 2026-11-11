@@ -34,8 +34,12 @@ public:
 private:
     void parseRawRequest(const QByteArray& data, HttpServiceRequest& request);
     void sendErrorResponse(quint16 requestId, bool webRequest);
-    void sendRawResponse(quint16 requestId, const QByteArray& body);
+    void sendRawResponse(quint16 requestId, const QByteArray& body,
+        const QVector<QPair<QString, QString>>& headers, int httpStatus);
+    static QString headerValue(const HttpServiceRequest& request, const QString& name);
     static QString oauthResponseJson(const QString& path, const HttpServiceRequest& request);
     void handleWeatherRequest(quint16 requestId, const QUrl& url);
+    void handleEphemerisRequest(quint16 requestId, const QUrl& url, const HttpServiceRequest& request);
+    static bool isGarminApiHost(const QString& host);
     static bool isWeatherHost(const QString& host);
 };

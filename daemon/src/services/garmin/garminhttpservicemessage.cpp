@@ -1,9 +1,13 @@
 #include "garminhttpservicemessage.h"
 
+#include "garminagpsfile.h"
 #include "garminweatherjson.h"
 #include "protobuftools.h"
 
+#include <QtCore/QCryptographicHash>
 #include <QtCore/QDebug>
+#include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QStringList>
 #include <QtCore/QUrl>
 #include <QtCore/QUrlQuery>
@@ -23,6 +27,16 @@ static const quint32 kFieldRrHttpStatus = 2;
 static const quint32 kFieldRrBody = 3;
 static const quint32 kFieldRrHeader = 5;
 static const quint64 kStatusOk = 100;
+
+// Gadgetbridge reads at most 1 MB of AGPS file data.
+static const qint64 kMaxAgpsFileSize = 1024 * 1024;
+
+static QVector<QPair<QString, QString>> jsonHeaders()
+{
+    QVector<QPair<QString, QString>> headers;
+    headers.append(qMakePair(QStringLiteral("Content-Type"), QStringLiteral("application/json")));
+    return headers;
+}
 
 static QString methodToString(quint64 method)
 {
@@ -107,11 +121,15 @@ static bool isOauthPath(const QString& path)
         || path.startsWith(QLatin1String("/oauthTokenExchangeService/"));
 }
 
-// The domains Gadgetbridge's WeatherInterceptor serves.
+// The domains Gadgetbridge's AgpsInterceptor and WeatherInterceptor serve.
+bool GarminHttpServiceMessage::isGarminApiHost(const QString& host)
+{
+    return host == QLatin1String("api.gcs.garmin.com") || host == QLatin1String("api.gcs.garmin.cn");
+}
+
 bool GarminHttpServiceMessage::isWeatherHost(const QString& host)
 {
-    return host == QLatin1String("api.gcs.garmin.com") || host == QLatin1String("api.gcs.garmin.cn")
-        || host == QLatin1String("cache.dciwx.com");
+    return isGarminApiHost(host) || host == QLatin1String("cache.dciwx.com");
 }
 
 // Same scope set Gadgetbridge sends: the union of its Swim 2, Venu 3 and
@@ -284,7 +302,86 @@ void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUr
     qDebug().noquote() << QStringLiteral("Garmin: Weather response for %1, %2 bytes")
                               .arg(path)
                               .arg(json.size());
-    sendRawResponse(requestId, json);
+    sendRawResponse(requestId, json, jsonHeaders(), 200);
+}
+
+// Header names come over the wire as the watch sends them, so compare
+// without case.
+QString GarminHttpServiceMessage::headerValue(const HttpServiceRequest& request, const QString& name)
+{
+    for (const QPair<QString, QString>& header : request.headers) {
+        if (header.first.compare(name, Qt::CaseInsensitive) == 0) {
+            return header.second;
+        }
+    }
+    return QString();
+}
+
+// -----------------------------------------------------------------------------
+// AGPS ephemeris files from the local folder, following Gadgetbridge's
+// AgpsInterceptor. While the answer is an error the watch asks again every
+// few minutes, so a placed file also stops that loop.
+// -----------------------------------------------------------------------------
+void GarminHttpServiceMessage::handleEphemerisRequest(quint16 requestId, const QUrl& url,
+    const HttpServiceRequest& request)
+{
+    const GarminAgpsFile::Kind kind = GarminAgpsFile::kindFor(url);
+    if (kind == GarminAgpsFile::Kind::None) {
+        qWarning().noquote() << QStringLiteral("Garmin: Unknown ephemeris url, refusing: %1").arg(url.toString());
+        sendErrorResponse(requestId, false);
+        return;
+    }
+
+    const QString dir = GarminAgpsFile::dirPath();
+    QDir().mkpath(dir);
+    const QString filePath = QDir(dir).filePath(GarminAgpsFile::fileName(kind));
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning().noquote() << QStringLiteral("Garmin: No ephemeris file at %1").arg(filePath);
+        sendErrorResponse(requestId, false);
+        return;
+    }
+    if (file.size() > kMaxAgpsFileSize) {
+        qWarning().noquote() << QStringLiteral("Garmin: Ephemeris file %1 is %2 bytes, refusing")
+                                    .arg(filePath)
+                                    .arg(file.size());
+        file.close();
+        sendErrorResponse(requestId, false);
+        return;
+    }
+    const QByteArray body = file.readAll();
+    file.close();
+
+    const QByteArray digest = QCryptographicHash::hash(body, QCryptographicHash::Md5).toHex();
+    const QString etag = QStringLiteral("\"%1\"").arg(QString::fromLatin1(digest));
+    if (headerValue(request, QStringLiteral("if-none-match")) == etag) {
+        qDebug().noquote() << QStringLiteral("Garmin: Ephemeris %1 unchanged, answering 304")
+                                  .arg(GarminAgpsFile::fileName(kind));
+        QVector<QPair<QString, QString>> headers;
+        headers.append(qMakePair(QStringLiteral("etag"), etag));
+        sendRawResponse(requestId, QByteArray(), headers, 304);
+        return;
+    }
+
+    if (!GarminAgpsFile::isValid(kind, body, GarminAgpsFile::requestedConstellations(url))) {
+        qWarning().noquote() << QStringLiteral("Garmin: Ephemeris file %1 not valid for %2, refusing")
+                                    .arg(filePath, url.toString());
+        sendErrorResponse(requestId, false);
+        return;
+    }
+
+    QString contentType = headerValue(request, QStringLiteral("accept"));
+    if (contentType.isEmpty()) {
+        contentType = QStringLiteral("application/octet-stream");
+    }
+    QVector<QPair<QString, QString>> headers;
+    headers.append(qMakePair(QStringLiteral("etag"), etag));
+    headers.append(qMakePair(QStringLiteral("cache-control"), QStringLiteral("max-age=14400")));
+    headers.append(qMakePair(QStringLiteral("Content-Type"), contentType));
+    qDebug().noquote() << QStringLiteral("Garmin: Ephemeris response for %1, %2 bytes")
+                              .arg(url.toString())
+                              .arg(body.size());
+    sendRawResponse(requestId, body, headers, 200);
 }
 
 // -----------------------------------------------------------------------------
@@ -347,7 +444,7 @@ void GarminHttpServiceMessage::parse(const QByteArray& data, quint16 requestId)
                     qDebug().noquote() << QStringLiteral("Garmin: Fake OAuth response for %1, %2 bytes")
                                               .arg(path)
                                               .arg(json.toUtf8().size());
-                    sendRawResponse(requestId, json.toUtf8());
+                    sendRawResponse(requestId, json.toUtf8(), jsonHeaders(), 200);
                     return;
                 }
             }
@@ -356,6 +453,10 @@ void GarminHttpServiceMessage::parse(const QByteArray& data, quint16 requestId)
         }
         if (isWeatherHost(url.host()) && path.startsWith(QLatin1String("/weather/"))) {
             handleWeatherRequest(requestId, url);
+            return;
+        }
+        if (isGarminApiHost(url.host()) && path.startsWith(QLatin1String("/ephemeris/"))) {
+            handleEphemerisRequest(requestId, url, request);
             return;
         }
         sendErrorResponse(requestId, false);
@@ -401,25 +502,30 @@ void GarminHttpServiceMessage::sendErrorResponse(quint16 requestId, bool webRequ
 }
 
 // -----------------------------------------------------------------------------
-// Success answer to a RawRequest: Status OK (100), HTTP 200, full body inline.
-// Like Gadgetbridge we do not split the body ourselves; the protobuf layer
-// chunks the response and the watch drives the continuation with status
-// messages. Header follows Gadgetbridge: Content-Type only.
+// Answer to a RawRequest: Status OK (100), the given HTTP status and headers,
+// body inline. Gadgetbridge does not split the body itself; the protobuf
+// layer chunks the response and the watch drives the continuation with
+// status messages. An empty body is left out, like the protobuf output does.
 // -----------------------------------------------------------------------------
-void GarminHttpServiceMessage::sendRawResponse(quint16 requestId, const QByteArray& body)
+void GarminHttpServiceMessage::sendRawResponse(quint16 requestId, const QByteArray& body,
+    const QVector<QPair<QString, QString>>& headers, int httpStatus)
 {
     QByteArray header;
-    appendStringField(header, 1, QStringLiteral("Content-Type"));
-    appendStringField(header, 2, QStringLiteral("application/json"));
+    for (const QPair<QString, QString>& entry : headers) {
+        appendStringField(header, 1, entry.first);
+        appendStringField(header, 2, entry.second);
+    }
 
     QByteArray inner; // RawResponse
     encodeFieldKey(inner, kFieldRrStatus, 0);
     encodeVarint(inner, kStatusOk);
     encodeFieldKey(inner, kFieldRrHttpStatus, 0);
-    encodeVarint(inner, 200);
-    encodeFieldKey(inner, kFieldRrBody, 2);
-    encodeVarint(inner, quint64(body.size()));
-    inner.append(body);
+    encodeVarint(inner, quint64(httpStatus));
+    if (!body.isEmpty()) {
+        encodeFieldKey(inner, kFieldRrBody, 2);
+        encodeVarint(inner, quint64(body.size()));
+        inner.append(body);
+    }
     encodeFieldKey(inner, kFieldRrHeader, 2);
     encodeVarint(inner, quint64(header.size()));
     inner.append(header);
