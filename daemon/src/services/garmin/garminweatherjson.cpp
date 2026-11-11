@@ -65,6 +65,11 @@ QJsonObject windValue(qreal speedMs, qreal directionDeg, const QString& unit)
         speed = speedMs * 3.6;
         units = QLatin1String(kUnitKilometersPerHour);
     }
+    // QJsonDocument writes doubles with up to 17 significant digits, so a
+    // value like 34.87 goes on the wire as 34.869999999999997. Round to a
+    // whole number to keep the value short; a weather display cannot use
+    // the extra digits.
+    speed = qRound(speed);
     const int direction = (qRound(directionDeg) % 360 + 360) % 360;
     static const char* const kCompass[] = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
     QJsonObject wind;
