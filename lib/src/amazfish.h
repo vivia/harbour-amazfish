@@ -10,7 +10,7 @@
 class Amazfish : public QObject {
     Q_OBJECT
 public:
-    enum class Feature{
+    enum class Feature {
         FEATURE_NONE = 0,
         FEATURE_HRM = 1,
         FEATURE_WEATHER = 2,
@@ -23,7 +23,8 @@ public:
         FEATURE_BUTTON_ACTION = 256,
         FEATURE_SCREENSHOT = 512,
         FEATURE_FILE_INSTALL = 1024,
-        FEATURE_SPO2 = 2048
+        FEATURE_SPO2 = 2048,
+        FEATURE_AGPS = 4096
     };
     Q_ENUM(Feature)
     Q_DECLARE_FLAGS(Features, Feature);
@@ -42,7 +43,9 @@ public:
         INFO_FW_REVISION,
         INFO_MANUFACTURER,
         INFO_IMMEDIATE_ALERT,
-        INFO_SPO2
+        INFO_SPO2,
+        INFO_AGPS_7DAYS,
+        INFO_AGPS_CONSTELLATIONS
     };
     Q_ENUM(Info)
 
