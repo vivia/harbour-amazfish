@@ -66,12 +66,15 @@ qreal CurrentWeather::temperature() const
 
 void CurrentWeather::refresh()
 {
-
-    clear();
-
     if (!m_city) {
         qDebug() << Q_FUNC_INFO << "No city set!";
         return;
+    }
+
+    // A failed fetch would leave zeroes behind that can be sent to a watch,
+    // so only drop the previous values when the city changed.
+    if (m_loadedCity != m_city) {
+        clear();
     }
 
     qDebug() << Q_FUNC_INFO << "Refreshing weather " << m_city->name();
@@ -88,6 +91,17 @@ void CurrentWeather::clear()
     m_minTemperature = 0;
     m_maxTemperature = 0;
     m_description = "";
+}
+
+bool CurrentWeather::hasCurrentData() const
+{
+    if (!m_city || m_loadedCity != m_city) {
+        return false;
+    }
+    // Temperatures are in Kelvin and OpenWeatherMap condition ids start at
+    // 200, so a zero temperature or code can only mean a fetch that never
+    // finished.
+    return m_temperature != 0 && m_maxTemperature != 0 && m_weatherCode != 0;
 }
 
 void CurrentWeather::handleCurrent(const QByteArray &reply)
@@ -130,6 +144,8 @@ void CurrentWeather::handleCurrent(const QByteArray &reply)
     QJsonObject sys = object.value("sys").toObject();
     m_sunrise = sys.value("sunrise").toInt(0);
     m_sunset = sys.value("sunset").toInt(0);
+
+    m_loadedCity = m_city;
 }
 
 void CurrentWeather::handleForecast(const QByteArray &reply)
@@ -311,6 +327,7 @@ void CurrentWeather::setLanguage(const QString &l)
 void CurrentWeather::slotFinishedCurrent()
 {
     if (m_reply->error() != QNetworkReply::NoError) {
+        qDebug() << Q_FUNC_INFO << "current weather fetch failed:" << m_reply->errorString();
         m_reply->deleteLater();
         m_reply = 0;
         return;
@@ -330,6 +347,7 @@ void CurrentWeather::slotFinishedCurrent()
 void CurrentWeather::slotFinishedForecast()
 {
     if (m_reply->error() != QNetworkReply::NoError) {
+        qDebug() << Q_FUNC_INFO << "forecast fetch failed:" << m_reply->errorString();
         m_reply->deleteLater();
         m_reply = 0;
         return;
