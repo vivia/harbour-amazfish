@@ -306,9 +306,8 @@ void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUr
         sendErrorResponse(requestId, false);
         return;
     }
-    qDebug().noquote() << QStringLiteral("Garmin: Weather response for %1, %2 bytes")
-                              .arg(path)
-                              .arg(json.size());
+    qWarning().noquote() << QStringLiteral("Garmin: Weather JSON for %1, %2 bytes:").arg(path).arg(json.size())
+                         << QString::fromUtf8(json);
     sendRawResponse(requestId, json, jsonHeaders(), 200);
 }
 
