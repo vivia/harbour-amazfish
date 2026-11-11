@@ -323,8 +323,9 @@ void GarminDevice::sendWeather(CurrentWeather* weather)
         mCommunicator->setWeatherCache(weather);
     }
     // Answer a request the watch sent while we had no data. A Lily 2 fetches
-    // weather over HttpService itself, so never push unasked.
-    if (mWeatherRequested) {
+    // weather over HttpService itself, so never push unasked. Keep the request
+    // pending when the update carries no usable current values.
+    if (mWeatherRequested && weather && weather->hasCurrentData()) {
         mWeatherRequested = false;
         sendWeatherToWatch();
     }
@@ -332,7 +333,7 @@ void GarminDevice::sendWeather(CurrentWeather* weather)
 
 void GarminDevice::onWeatherRequestReceived()
 {
-    if (!mWeather) {
+    if (!mWeather || !mWeather->hasCurrentData()) {
         mWeatherRequested = true;
         if (!mWeatherRefreshRequested) {
             // The next scheduled fetch can be an hour away, so ask for one now. Once per
@@ -348,7 +349,7 @@ void GarminDevice::onWeatherRequestReceived()
 
 void GarminDevice::sendWeatherToWatch()
 {
-    if (!mCommunicator || !mWeather) {
+    if (!mCommunicator || !mWeather || !mWeather->hasCurrentData()) {
         return;
     }
     const FitWeatherFrames frames = GarminWeatherMessage::encodeWeather(mWeather);
