@@ -3,6 +3,7 @@
 #include "deviceinfoservice.h"
 #include "hrmservice.h"
 #include "services/garmin/communicator_v2.h"
+#include "services/garmin/garminagpsfile.h"
 #include "services/garmin/garmintypes.h"
 #include "services/garmin/garminweathermessage.h"
 
@@ -54,7 +55,8 @@ Amazfish::Features GarminDevice::supportedFeatures() const
         | Amazfish::Feature::FEATURE_HRM
         | Amazfish::Feature::FEATURE_STEPS
         | Amazfish::Feature::FEATURE_ALERT
-        | Amazfish::Feature::FEATURE_WEATHER;
+        | Amazfish::Feature::FEATURE_WEATHER
+        | Amazfish::Feature::FEATURE_AGPS;
 }
 
 
@@ -1104,6 +1106,12 @@ QString GarminDevice::information(Amazfish::Info i) const
     case Amazfish::Info::INFO_HEARTRATE:
         qDebug() << Q_FUNC_INFO << "Heart rate: " << mCommunicator.data()->heartRate();
         return QString::number(mCommunicator.data()->heartRate());
+        break;
+    case Amazfish::Info::INFO_AGPS_7DAYS:
+        return GarminAgpsFile::describe(GarminAgpsFile::Kind::RxNetworks);
+        break;
+    case Amazfish::Info::INFO_AGPS_CONSTELLATIONS:
+        return GarminAgpsFile::describe(GarminAgpsFile::Kind::Constellations);
         break;
     default:
         return QString("");
