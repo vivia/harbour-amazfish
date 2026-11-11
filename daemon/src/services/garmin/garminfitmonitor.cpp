@@ -15,8 +15,13 @@ const quint8 FIT_MONITORING_ACTIVITY_TYPE = 5;
 const quint8 FIT_MONITORING_TYPE_INTENSITY = 24;
 const quint8 FIT_MONITORING_DURATION_MIN = 29;
 const quint8 FIT_MONITORING_HEART_RATE = 27;
+const quint8 FIT_MONITORING_ACTIVE_CALORIES = 19;
 const quint8 FIT_MONITORING_TIMESTAMP = 253;
 const quint8 FIT_MONITORING_TIMESTAMP16 = 26;
+
+const quint16 FIT_MESSAGE_MONITORING_INFO = 103;
+const quint8 FIT_MONITORING_INFO_LOCAL_TIMESTAMP = 0;
+const quint8 FIT_MONITORING_INFO_RESTING_METABOLIC_RATE = 5;
 
 // The short timestamps repeat every 18 hours, so a counter is per activity
 // type only within one day of the watch.
@@ -43,6 +48,25 @@ int recordActivityType(const GarminFitMessage& message)
     }
     const GarminFitFieldValue* type = validField(message, FIT_MONITORING_ACTIVITY_TYPE);
     return type ? int(type->raw) : -1;
+}
+
+// Places one record on the file's time line and advances the chain state.
+// Returns false when the record carries nothing to place. A record can carry
+// field 253 set to 0. That is no timestamp at all, so treat it as absent.
+bool resolveRecordTimestamp(const GarminFitMessage& message, bool& haveAnchor, qint64& anchor)
+{
+    const GarminFitFieldValue* timestamp = validField(message, FIT_MONITORING_TIMESTAMP);
+    const GarminFitFieldValue* timestamp16 = validField(message, FIT_MONITORING_TIMESTAMP16);
+    if (timestamp && timestamp->raw != 0) {
+        anchor = timestamp->raw;
+        haveAnchor = true;
+    } else if (timestamp16 && haveAnchor) {
+        anchor += (timestamp16->raw - (anchor % qint64(TIMESTAMP16_MODULO)) + qint64(TIMESTAMP16_MODULO))
+            % qint64(TIMESTAMP16_MODULO);
+    } else {
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -81,18 +105,7 @@ bool buildGarminMonitorSamples(const QVector<GarminFitMessage>& messages, QVecto
         if (message.globalNumber != FIT_MESSAGE_MONITORING) {
             continue;
         }
-        const GarminFitFieldValue* timestamp = validField(message, FIT_MONITORING_TIMESTAMP);
-        const GarminFitFieldValue* timestamp16 = validField(message, FIT_MONITORING_TIMESTAMP16);
-        // A record can carry field 253 set to 0. That is no timestamp at all,
-        // so treat it as absent: the anchor from an earlier record or the
-        // 16 bit timestamp still place the sample.
-        if (timestamp && timestamp->raw != 0) {
-            anchor = timestamp->raw;
-            haveAnchor = true;
-        } else if (timestamp16 && haveAnchor) {
-            anchor += (timestamp16->raw - (anchor % qint64(TIMESTAMP16_MODULO)) + qint64(TIMESTAMP16_MODULO))
-                % qint64(TIMESTAMP16_MODULO);
-        } else {
+        if (!resolveRecordTimestamp(message, haveAnchor, anchor)) {
             continue;
         }
 
@@ -152,6 +165,101 @@ bool buildGarminMonitorSamples(const QVector<GarminFitMessage>& messages, QVecto
         }
     }
     samples.resize(merged + 1);
+
+    return !samples.isEmpty();
+}
+
+bool buildGarminDailyCaloriesSamples(const QVector<GarminFitMessage>& messages,
+    QVector<GarminDailyCaloriesSample>& samples)
+{
+    samples.clear();
+
+    bool haveAnchor = false;
+    qint64 anchor = 0;
+
+    // Per day and activity type the highest active calories counter seen.
+    // The counter only grows within a day, so the highest value is the
+    // latest known state of that day. Keyed by Julian day of the watch.
+    QHash<int, QHash<int, int>> dayCounters;
+    // Per day the basal value the watch reports for its user, kcal per day.
+    QHash<int, int> dayMetabolicRate;
+
+    for (const GarminFitMessage& message : messages) {
+        if (message.globalNumber == FIT_MESSAGE_MONITORING) {
+            if (!resolveRecordTimestamp(message, haveAnchor, anchor)) {
+                continue;
+            }
+            const GarminFitFieldValue* activeCalories = validField(message, FIT_MONITORING_ACTIVE_CALORIES);
+            if (!activeCalories) {
+                continue;
+            }
+            QDateTime timestamp = QDateTime::fromMSecsSinceEpoch((anchor + FIT_EPOCH_SECONDS) * 1000);
+            const GarminFitFieldValue* duration = validField(message, FIT_MONITORING_DURATION_MIN);
+            if (duration && duration->raw > 0) {
+                // Day-summary records count minutes since local midnight, and
+                // the pair written at midnight already carries the next day's
+                // timestamp. Subtract the minutes to get the day the counter
+                // belongs to.
+                timestamp = timestamp.addSecs(-qint64(duration->raw) * 60);
+            }
+            const int day = timestamp.date().toJulianDay();
+            const int type = recordActivityType(message);
+            QHash<int, int>& counters = dayCounters[day];
+            const int value = int(activeCalories->raw);
+            if (value > counters.value(type, -1)) {
+                counters[type] = value;
+            }
+        } else if (message.globalNumber == FIT_MESSAGE_MONITORING_INFO) {
+            const GarminFitFieldValue* metabolicRate = validField(message, FIT_MONITORING_INFO_RESTING_METABOLIC_RATE);
+            if (!metabolicRate) {
+                continue;
+            }
+            // Unlike the monitoring records, which carry the watch's own
+            // clock as if it were UTC, these hold the local clock in field 0
+            // and real UTC in field 253.
+            const GarminFitFieldValue* local = validField(message, FIT_MONITORING_INFO_LOCAL_TIMESTAMP);
+            const GarminFitFieldValue* timestamp = validField(message, FIT_MONITORING_TIMESTAMP);
+            const GarminFitFieldValue* place = nullptr;
+            if (local && local->raw > 0) {
+                place = local;
+            } else if (timestamp && timestamp->raw > 0) {
+                place = timestamp;
+            }
+            if (!place) {
+                continue;
+            }
+            const QDateTime when = QDateTime::fromMSecsSinceEpoch((place->raw + FIT_EPOCH_SECONDS) * 1000);
+            dayMetabolicRate[when.date().toJulianDay()] = int(metabolicRate->raw);
+        }
+    }
+
+    QList<int> days;
+    for (auto it = dayCounters.constBegin(); it != dayCounters.constEnd(); ++it) {
+        days.append(it.key());
+    }
+    for (auto it = dayMetabolicRate.constBegin(); it != dayMetabolicRate.constEnd(); ++it) {
+        if (!dayCounters.contains(it.key())) {
+            days.append(it.key());
+        }
+    }
+    std::sort(days.begin(), days.end());
+
+    for (int day : days) {
+        GarminDailyCaloriesSample sample;
+        sample.day = QDate::fromJulianDay(day);
+        sample.activeCalories = -1;
+        sample.restingMetabolicRate = dayMetabolicRate.contains(day) ? dayMetabolicRate.value(day) : -1;
+
+        const QHash<int, int> counters = dayCounters.value(day);
+        if (!counters.isEmpty()) {
+            int total = 0;
+            for (auto it = counters.constBegin(); it != counters.constEnd(); ++it) {
+                total += it.value();
+            }
+            sample.activeCalories = total;
+        }
+        samples.append(sample);
+    }
 
     return !samples.isEmpty();
 }
