@@ -182,6 +182,7 @@ public:
     qlonglong sunset() const;
 
     Q_INVOKABLE void refresh();
+    bool hasCurrentData() const;
 
     int forecastCount() const;
     const Forecast& forecast(int f) const;
@@ -205,6 +206,8 @@ private:
     QNetworkAccessManager *network = nullptr;
     QNetworkReply *m_reply = nullptr;
     City *m_city = nullptr;
+    // The city the current weather values below were fetched for.
+    City* m_loadedCity = nullptr;
     QString m_language;
 
     qreal m_temperature = 0;
