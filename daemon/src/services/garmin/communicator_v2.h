@@ -213,6 +213,10 @@ public:
     // for an update. The watch asks again a few seconds later, and by then a
     // fresh fetch has often arrived.
     void requestWeather() { emit weatherRequestReceived(); }
+    // Set once this connection asked for weather through the HttpService tunnel.
+    // Such a watch reads the JSON answers, not FIT weather records.
+    void noteHttpWeatherRequest() { mHttpWeatherSeen = true; }
+    bool httpWeatherSeen() const { return mHttpWeatherSeen; }
 
 signals:
     void logDebug(const QString& msg);
@@ -324,6 +328,7 @@ private:
 
     // Borrowed: GarminDevice::mWeather, owned by DeviceInterface.
     const CurrentWeather* mWeatherCache = nullptr;
+    bool mHttpWeatherSeen = false;
 
     // Last Synchronization (5037) the watch sent; decides what a download may ask for.
     quint8 mSynchronizationType = 0;

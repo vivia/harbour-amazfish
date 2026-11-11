@@ -1295,6 +1295,7 @@ void CommunicatorV2::dispose() {
     mSendInProgress = false;
     mSendRetries = 0;
     resetWeatherTransfer();
+    mHttpWeatherSeen = false;
     mFileTransferState = FileTransferState::Idle;
     mFileOut.close();
     mFileBytes.clear();

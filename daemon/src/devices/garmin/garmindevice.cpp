@@ -353,6 +353,10 @@ void GarminDevice::sendWeatherToWatch()
     if (!mCommunicator || !mWeather || !mWeather->hasCurrentData()) {
         return;
     }
+    if (mCommunicator->httpWeatherSeen()) {
+        qWarning() << Q_FUNC_INFO << "Garmin: Watch fetches weather over HTTP, FIT records not sent";
+        return;
+    }
     const FitWeatherFrames frames = GarminWeatherMessage::encodeWeather(mWeather);
     mCommunicator->sendWeatherFrames(frames.fitDefinition, frames.fitData);
 }

@@ -258,6 +258,9 @@ static int queryIntValue(const QUrlQuery& query, const QString& key, int fallbac
 void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUrl& url)
 {
     const QString path = url.path();
+    if (mCommunicator) {
+        mCommunicator->noteHttpWeatherRequest();
+    }
     const CurrentWeather* weather = mCommunicator ? mCommunicator->weatherCache() : nullptr;
     if (!weather || !weather->hasCurrentData()) {
         // The watch asks again a few seconds later when the answer is an error,
