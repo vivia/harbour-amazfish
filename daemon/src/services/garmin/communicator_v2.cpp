@@ -1303,10 +1303,8 @@ void CommunicatorV2::dispose() {
     mState->serviceByHandle.clear();
     mState->serviceCallbacks.clear();
     mServicesResolved = false;
-    if (!isFirstConnect) {
-        isFirstConnect = true;    mConnected = false;
-
-    }
+    isFirstConnect = true;
+    mConnected = false;
 }
 
 void CommunicatorV2::onConnectionStateChange(bool connected) {
