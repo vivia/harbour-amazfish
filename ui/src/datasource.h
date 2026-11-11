@@ -26,7 +26,8 @@ public:
         StressAuto = 12,
         StressManual = 13,
         StressSummary = 14,
-        Vo2maxSummary = 15
+        Vo2maxSummary = 15,
+        DailyCalories = 16
     };
     Q_ENUM(Type)
 

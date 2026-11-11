@@ -158,6 +158,30 @@ PagePL {
         }
 
         Graph {
+            id: graphDailyCalories
+            graphTitle: qsTr("Daily Calories")
+            graphHeight: 300
+
+            axisX.mask: "MM/dd"
+            axisY.units: qsTr("kcal")
+            type: DataSource.DailyCalories
+            graphType: bar
+
+            // Axis follows the 11-day window: max of the visible days + 20%.
+            minY: 0
+            scale: true
+
+            visible: supportsDataRefresh(Amazfish.TYPE_DAILY_CALORIES)
+
+            valueConverter: function(value) {
+                return value.toFixed(0);
+            }
+            onClicked: {
+                updateGraph(day);
+            }
+        }
+
+        Graph {
             id: graphBodyTemperature
             graphTitle: qsTr("Body Temperature")
             graphHeight: 300
@@ -186,6 +210,7 @@ PagePL {
         graphIntensity.updateGraph(day);
         graphHRV.updateGraph(day);
         graphVo2max.updateGraph(day);
+        graphDailyCalories.updateGraph(day);
         graphBodyTemperature.updateGraph(day);
     }
 

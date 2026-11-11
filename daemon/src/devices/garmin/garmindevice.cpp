@@ -63,6 +63,7 @@ Amazfish::DataTypes GarminDevice::supportedDataTypes() const
     return Amazfish::DataType::TYPE_SPO2
         | Amazfish::DataType::TYPE_STRESS
         | Amazfish::DataType::TYPE_VO2MAX
+        | Amazfish::DataType::TYPE_DAILY_CALORIES
         | Amazfish::DataType::TYPE_HRV
         | Amazfish::DataType::TYPE_HEART_RATE
         | Amazfish::DataType::TYPE_ACTIVITY
