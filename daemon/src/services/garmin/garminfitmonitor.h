@@ -16,4 +16,16 @@ struct GarminMonitorSample {
 
 bool buildGarminMonitorSamples(const QVector<GarminFitMessage>& messages, QVector<GarminMonitorSample>& samples);
 
+// The calories of one day of the watch: the active calories summed over all
+// activity types, and the basal value in kcal per day the watch reports for
+// its user. -1 means the file did not carry that part.
+struct GarminDailyCaloriesSample {
+    QDate day;
+    int activeCalories;
+    int restingMetabolicRate;
+};
+
+bool buildGarminDailyCaloriesSamples(const QVector<GarminFitMessage>& messages,
+    QVector<GarminDailyCaloriesSample>& samples);
+
 #endif // GARMINFITMONITOR_H
