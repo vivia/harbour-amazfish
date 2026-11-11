@@ -12,6 +12,8 @@
 #include <QtCore/QUrl>
 #include <QtCore/QUrlQuery>
 
+#include <zlib.h>
+
 // Field numbers from gdi_http_service.proto.
 // HttpService: webRequest=1, webResponse=2, rawRequest=5, rawResponse=6, showURLNotification=11.
 // RawRequest: url=1, method=3, body=4, header=5 (repeated Header key=1 value=2), rawBody=7.
@@ -36,6 +38,31 @@ static QVector<QPair<QString, QString>> jsonHeaders()
     QVector<QPair<QString, QString>> headers;
     headers.append(qMakePair(QStringLiteral("Content-Type"), QStringLiteral("application/json")));
     return headers;
+}
+
+// Gadgetbridge gzips weather answers when the watch asks for it. zlib's gzip
+// wrapper matches Java's GZIPOutputStream. Returns empty on failure.
+static QByteArray gzipBody(const QByteArray& body)
+{
+    z_stream stream = {};
+    if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        return QByteArray();
+    }
+    QByteArray out;
+    out.resize(int(deflateBound(&stream, uLong(body.size()))));
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(body.constData()));
+    stream.avail_in = uInt(body.size());
+    stream.next_out = reinterpret_cast<Bytef*>(out.data());
+    stream.avail_out = uInt(out.size());
+    const int ret = deflate(&stream, Z_FINISH);
+    const uLong written = stream.total_out;
+    deflateEnd(&stream);
+    if (ret != Z_STREAM_END) {
+        qWarning().noquote() << QStringLiteral("Garmin: gzip failed, zlib code %1, sending uncompressed").arg(ret);
+        return QByteArray();
+    }
+    out.resize(int(written));
+    return out;
 }
 
 static QString methodToString(quint64 method)
@@ -255,7 +282,8 @@ static int queryIntValue(const QUrlQuery& query, const QString& key, int fallbac
     return ok ? value : fallback;
 }
 
-void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUrl& url)
+void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUrl& url,
+    const HttpServiceRequest& request)
 {
     const QString path = url.path();
     if (mCommunicator) {
@@ -308,7 +336,16 @@ void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUr
     }
     qWarning().noquote() << QStringLiteral("Garmin: Weather JSON for %1, %2 bytes:").arg(path).arg(json.size())
                          << QString::fromUtf8(json);
-    sendRawResponse(requestId, json, jsonHeaders(), 200);
+    QVector<QPair<QString, QString>> headers = jsonHeaders();
+    if (headerValue(request, QStringLiteral("Accept-Encoding")).compare(QLatin1String("gzip"), Qt::CaseInsensitive) == 0) {
+        const QByteArray compressed = gzipBody(json);
+        if (!compressed.isEmpty()) {
+            headers.append(qMakePair(QStringLiteral("Content-Encoding"), QStringLiteral("gzip")));
+            qWarning().noquote() << QStringLiteral("Garmin: Compressing response, %1 -> %2 bytes").arg(json.size()).arg(compressed.size());
+            json = compressed;
+        }
+    }
+    sendRawResponse(requestId, json, headers, 200);
 }
 
 // Header names come over the wire as the watch sends them, so compare
@@ -458,7 +495,7 @@ void GarminHttpServiceMessage::parse(const QByteArray& data, quint16 requestId)
                                         .arg(request.method, path);
         }
         if (isWeatherHost(url.host()) && path.startsWith(QLatin1String("/weather/"))) {
-            handleWeatherRequest(requestId, url);
+            handleWeatherRequest(requestId, url, request);
             return;
         }
         if (isGarminApiHost(url.host()) && path.startsWith(QLatin1String("/ephemeris/"))) {
