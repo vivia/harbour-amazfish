@@ -298,6 +298,15 @@ set(HEADERS
 ./src/services/garmin/garminweatherjson.h
 ./src/services/garmin/garminweathermessage.h
 ./src/services/garmin/fitweatherencoder.h
+./src/services/garmin/garminfitreader.h
+./src/services/garmin/garminfitsummary.h
+./src/services/garmin/garminfitsleep.h
+./src/services/garmin/garminfithrv.h
+./src/services/garmin/garminfitmonitor.h
+./src/services/garmin/garminfitspo2.h
+./src/services/garmin/garminfitstress.h
+./src/services/garmin/garminfitmetrics.h
+./src/services/garmin/garminfitgpx.h
 ./src/services/garmin/garminfilterstatusmessage.h
 ./src/services/garmin/garminfiletransferdatamessage.h
 ./src/services/garmin/garminnotificationupdatemessage.h
