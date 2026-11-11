@@ -79,6 +79,7 @@ public:
         TYPE_HUAMI_STATISTICS = 1024,
         TYPE_HRV = 2048,
         TYPE_VO2MAX = 4096,
+        TYPE_DAILY_CALORIES = 8192,
 
     };
     Q_ENUM(DataType)

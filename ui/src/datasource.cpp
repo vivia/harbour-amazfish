@@ -229,6 +229,14 @@ QVariant DataSource::data(const Type type, const QDate &day)
                                                         " AND vo2max_timestamp_dt <= '"
                 + day.toString("yyyy-MM-ddT23:59:59") + "' GROUP BY date(vo2max_timestamp_dt)"
                                                         " ORDER BY vo2max_timestamp_dt ASC";
+        } else if (type == DataSource::DailyCalories) {
+            QString dateStr = day.toString("yyyy-MM-ddT00:00:00");
+            qry = "SELECT date(daily_calories_date), daily_calories_active FROM daily_calories "
+                  "WHERE date(daily_calories_date) >= date('"
+                + dateStr + "','-10 day')"
+                            " AND date(daily_calories_date) <= date('"
+                + dateStr + "') "
+                            "AND daily_calories_active IS NOT NULL ORDER BY daily_calories_date ASC";
         }
 
         qDebug() << qry;
