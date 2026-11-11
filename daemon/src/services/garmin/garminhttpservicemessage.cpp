@@ -241,7 +241,7 @@ void GarminHttpServiceMessage::handleWeatherRequest(quint16 requestId, const QUr
 {
     const QString path = url.path();
     const CurrentWeather* weather = mCommunicator ? mCommunicator->weatherCache() : nullptr;
-    if (!weather) {
+    if (!weather || !weather->hasCurrentData()) {
         // The watch asks again a few seconds later when the answer is an error,
         // so the fetch started here is often ready by then.
         qWarning().noquote() << QStringLiteral("Garmin: No weather data for %1, asking for a fetch").arg(path);
