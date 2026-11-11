@@ -38,7 +38,7 @@ private:
         const QVector<QPair<QString, QString>>& headers, int httpStatus);
     static QString headerValue(const HttpServiceRequest& request, const QString& name);
     static QString oauthResponseJson(const QString& path, const HttpServiceRequest& request);
-    void handleWeatherRequest(quint16 requestId, const QUrl& url);
+    void handleWeatherRequest(quint16 requestId, const QUrl& url, const HttpServiceRequest& request);
     void handleEphemerisRequest(quint16 requestId, const QUrl& url, const HttpServiceRequest& request);
     static bool isGarminApiHost(const QString& host);
     static bool isWeatherHost(const QString& host);
