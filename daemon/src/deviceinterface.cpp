@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QPointer>
 #include <QProcess>
 
 #include <KDb3/KDbDriverManager>
@@ -23,6 +24,9 @@
 using namespace UserMetricsInput;
 #endif
 
+#ifdef MER_EDITION_SAILFISH
+#include "telepathysmssender.h"
+#endif
 
 static const char *SERVICE = SERVICE_NAME_AMAZFISH;
 static const char *PATH = "/application";
@@ -44,6 +48,8 @@ DeviceInterface::DeviceInterface()
         connect(m_device, &AbstractDevice::buttonPressed, this, &DeviceInterface::handleButtonPressed, Qt::UniqueConnection);
         connect(m_device, &AbstractDevice::informationChanged, this, &DeviceInterface::slot_informationChanged, Qt::UniqueConnection);
         connect(m_device, &AbstractDevice::deviceEvent, this, &DeviceInterface::deviceEvent, Qt::UniqueConnection);
+        connect(m_device, &AbstractDevice::notificationReplyRequested, this,
+            &DeviceInterface::onNotificationReplyRequested, Qt::UniqueConnection);
         connect(m_device, &AbstractDevice::weatherRequested, this, &DeviceInterface::onWeatherRequested, Qt::UniqueConnection);
     }
 
@@ -187,6 +193,8 @@ QString DeviceInterface::pair(const QString &name, const QString &deviceType, co
         connect(m_device, &AbstractDevice::buttonPressed, this, &DeviceInterface::handleButtonPressed, Qt::UniqueConnection);
         connect(m_device, &AbstractDevice::informationChanged, this, &DeviceInterface::slot_informationChanged, Qt::UniqueConnection);
         connect(m_device, &AbstractDevice::deviceEvent, this, &DeviceInterface::deviceEvent, Qt::UniqueConnection);
+        connect(m_device, &AbstractDevice::notificationReplyRequested, this,
+            &DeviceInterface::onNotificationReplyRequested, Qt::UniqueConnection);
         connect(m_device, &AbstractDevice::weatherRequested, this, &DeviceInterface::onWeatherRequested, Qt::UniqueConnection);
         m_device->pair();
         m_autoreconnect = true;
@@ -242,6 +250,11 @@ HRMService *DeviceInterface::hrmService() const
 
 void DeviceInterface::onNotification(watchfish::Notification *notification)
 {
+    // Never send Amazfish's own popups back to the watch.
+    if (notification->appId() == QLatin1String("uk.co.piggz.amazfish")) {
+        return;
+    }
+
     Amazfish::WatchNotification n;
     n.id = notification->id();
     n.appId = notification->appId();
@@ -284,6 +297,91 @@ void DeviceInterface::onNotification(watchfish::Notification *notification)
         if (m_notificationBuffer.count() > 10) {
             m_notificationBuffer.dequeue();
         }
+    }
+}
+
+void DeviceInterface::onNotificationReplyRequested(int notificationId, const QString& text)
+{
+    // The watch asked to reply to a notification it received from the phone.
+    // Reply through the notification's own input action, no app specific knowledge.
+    watchfish::Notification* notification = m_notificationMonitor.getNotification(notificationId);
+    if (!notification) {
+        qDebug() << Q_FUNC_INFO << "notification" << notificationId << "is no longer open";
+        notifyReplyFailed(tr("notification %1").arg(notificationId),
+            tr("the notification is no longer open on the phone"));
+        return;
+    }
+
+    const QStringList actions = notification->actions();
+    for (const QString& action : actions) {
+        if (notification->actionType(action) != QLatin1String("input")) {
+            continue;
+        }
+        // Tell the user when the reply does not go out, the watch gets no
+        // failure feedback over Bluetooth: the Garmin API cannot express it.
+        connect(notification, &watchfish::Notification::actionFailed, this,
+            [this, action](const QString&, const QString& error) {
+                notifyReplyFailed(action, error);
+            });
+#ifdef MER_EDITION_SAILFISH
+        // Messages' sendMessage is refused for untrusted callers. Send over
+        // telepathy-ring instead; the reply still lands in the conversation.
+        if (notification->actionInterface(action) == QLatin1String("org.sailfishos.Messages")) {
+            const QStringList args = notification->actionArgs(action);
+            QString number;
+            for (const QString& arg : args) {
+                if (arg.startsWith(QLatin1Char('+'))) {
+                    number = arg;
+                    break;
+                }
+            }
+            if (!number.isEmpty()) {
+                qDebug() << Q_FUNC_INFO << "replying to notification" << notificationId << "via telepathy to" << number;
+                QPointer<TelepathySmsSender> sender = TelepathySmsSender::send(number, text, this);
+                connect(sender.data(), &TelepathySmsSender::failureSignal, this,
+                    [this](const QString& number, const QString& error) {
+                        notifyReplyFailed(number, error);
+                    });
+                return;
+            }
+            qWarning() << Q_FUNC_INFO << "could not find a recipient number in the action args" << args;
+        }
+#endif
+        qDebug() << Q_FUNC_INFO << "replying to notification" << notificationId << "via action" << action;
+        notification->invokeAction(action, text);
+        return;
+    }
+    qDebug() << Q_FUNC_INFO << "notification" << notificationId << "has no input action";
+    notifyReplyFailed(notification->appName(), tr("the app does not accept replies"));
+}
+
+void DeviceInterface::notifyReplyFailed(const QString& context, const QString& error)
+{
+    qWarning() << Q_FUNC_INFO << context << error;
+
+    QList<QVariant> args;
+    QVariantMap hints;
+    hints.insert(QStringLiteral("x-nemo-owner"), QStringLiteral("uk.co.piggz.amazfish"));
+    args << QStringLiteral("Amazfish") << uint(0) << QString()
+         << tr("Reply to %1 failed to send").arg(context) << QString()
+         << QStringList() << hints << int(-1);
+    QDBusMessage notifyCall = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
+    notifyCall.setArguments(args);
+    QDBusConnection::sessionBus().call(notifyCall);
+
+    // Same alert on the watch: the Garmin API cannot report a failed reply
+    // against the original notification, so post a new notification instead.
+    if (m_device) {
+        Amazfish::WatchNotification n;
+        n.id = 0;
+        n.appId = "uk.co.piggz.amazfish";
+        n.appName = tr("Amazfish");
+        n.summary = tr("Reply not sent");
+        n.body = tr("Reply to %1 could not be sent: %2").arg(context, error);
+        m_device->sendAlert(n);
     }
 }
 
