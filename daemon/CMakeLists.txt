@@ -312,6 +312,13 @@ set(HEADERS
 ./src/ecdh/ecdh.h
 )
 
+if(FLAVOR STREQUAL "silica")
+    set(SOURCES ${SOURCES}
+        ./src/telepathysmssender.cpp)
+    set(HEADERS ${HEADERS}
+        ./src/telepathysmssender.h)
+endif()
+
 add_executable(harbour-amazfishd ${SOURCES} ${HEADERS}
 )
 
