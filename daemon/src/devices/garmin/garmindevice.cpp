@@ -43,12 +43,19 @@ Amazfish::Features GarminDevice::supportedFeatures() const
 
     //HRM and steps should be supported on all devices
 
-    return Amazfish::Feature::FEATURE_NONE
+    Amazfish::Features features = Amazfish::Feature::FEATURE_NONE
         | Amazfish::Feature::FEATURE_ACTIVITY
         | Amazfish::Feature::FEATURE_HRM
         | Amazfish::Feature::FEATURE_STEPS
         | Amazfish::Feature::FEATURE_ALERT
         | Amazfish::Feature::FEATURE_WEATHER;
+
+    // Replying uses x-nemo remote actions, only posted on Sailfish OS notifications.
+#ifdef MER_EDITION_SAILFISH
+    features |= Amazfish::Feature::FEATURE_NOTIFICATIONREPLIES;
+#endif
+
+    return features;
 }
 
 
@@ -93,6 +100,9 @@ void GarminDevice::sendAlert(const Amazfish::WatchNotification &notification)
         else if (notification.appName=="Calendar")
             note.notificationType=NotificationType::GenericCalendar;
         else note.notificationType = NotificationType::Generic;
+        note.canReply = notification.canReply;
+        // Amazfish's own alerts get no actions at all.
+        note.hasActions = notification.appId != QLatin1String("uk.co.piggz.amazfish");
         note.id=notification.id;
         mNotificationHandler->onNotification(note);
     }
@@ -218,6 +228,12 @@ void GarminDevice::onRejectCallEvent(){
     emit deviceEvent(AbstractDevice::EVENT_DECLINE_CALL);
 }
 
+void GarminDevice::onNotificationReplyRequested(qint32 notificationId, const QString& text)
+{
+    qDebug() << Q_FUNC_INFO << "Garmin: Reply requested for notification" << notificationId;
+    emit notificationReplyRequested(notificationId, text);
+}
+
 void GarminDevice::onFindPhoneRequested()
 {
     emit deviceEvent(AbstractDevice::EVENT_FIND_PHONE);
@@ -271,6 +287,7 @@ QBLEService *GarminDevice::drv_createService(const QString &uuid, const QString 
         connect(com.data(), &CommunicatorV2::NotificationPerformAction, mNotificationHandler.data(), &GarminNotificationHandler::onNotificationPerformAction);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::acceptIncomingCall, this, &GarminDevice::onAnswerCallEvent);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::rejectIncomingCall, this, &GarminDevice::onRejectCallEvent);
+        connect(mNotificationHandler.data(), &GarminNotificationHandler::notificationReplyRequested, this, &GarminDevice::onNotificationReplyRequested);
         connect(com.data(), &CommunicatorV2::weatherRequestReceived, this, &GarminDevice::onWeatherRequestReceived, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::activityFileParsed, this, &GarminDevice::onActivityFileParsed, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneRequested, this, &GarminDevice::onFindPhoneRequested, Qt::UniqueConnection);

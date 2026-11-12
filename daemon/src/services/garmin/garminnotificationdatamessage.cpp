@@ -111,10 +111,13 @@ QByteArray encodeNotificationActionsString(NotificationSpec notificationSpec) {
          return outputStream;
      }
 
-     outputStream.append(char(1)); // One action
+     // The watch offers a Reply screen for the reply action, so only add it
+     // when there is an app on the phone that will take the text.
+     outputStream.append(char(notificationSpec.canReply ? 2 : 1));
      outputStream.append(encodeNotificationAction(NotificationAction::DISMISS_NOTIFICATION, QObject::tr("Dismiss")));
-     //Reply not yet working
-     //outputStream.append(encodeNotificationAction(NotificationAction::REPLY_MESSAGES, "Reply"));
+     if (notificationSpec.canReply) {
+         outputStream.append(encodeNotificationAction(NotificationAction::REPLY_MESSAGES, QObject::tr("Reply")));
+     }
      return outputStream;
 }
 

@@ -414,7 +414,7 @@ struct NotificationControlMessage {
     qint32 notificationId{};
     quint8 command{};
     QByteArray data;
-
+    QString actionString;
 };
 
 
