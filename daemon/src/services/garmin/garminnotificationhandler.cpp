@@ -135,6 +135,9 @@ void GarminNotificationHandler::onNotificationPerformAction(const NotificationCo
             case (quint8)NotificationAction::REJECT_INCOMING_CALL:
                 emit rejectIncomingCall();
                 return;
+            case (quint8)NotificationAction::REPLY_MESSAGES:
+                emit notificationReplyRequested(msg.notificationId, msg.actionString);
+                return;
             case (quint8)NotificationAction::REPLY_INCOMING_CALL:
                 return;
             default:

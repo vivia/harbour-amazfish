@@ -96,6 +96,8 @@ public:
         QString appName;
         QString summary;
         QString body;
+        // Whether the app on the phone accepts a text reply to this notification.
+        bool canReply = false;
 
         QVariantMap toQVariantMap() const {
             QVariantMap map;
@@ -104,6 +106,7 @@ public:
             map["appName"] = appName;
             map["summary"] = summary;
             map["body"] = body;
+            map["canReply"] = canReply;
             return map;
         }
 
@@ -114,6 +117,7 @@ public:
             n.appName = map.value("appName").toString();
             n.summary = map.value("summary").toString();
             n.body = map.value("body").toString();
+            n.canReply = map.value("canReply").toBool();
             return n;
         }
     };
