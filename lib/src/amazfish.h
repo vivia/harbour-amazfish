@@ -23,7 +23,8 @@ public:
         FEATURE_BUTTON_ACTION = 256,
         FEATURE_SCREENSHOT = 512,
         FEATURE_FILE_INSTALL = 1024,
-        FEATURE_SPO2 = 2048
+        FEATURE_SPO2 = 2048,
+        FEATURE_NOTIFICATIONREPLIES = 8192
     };
     Q_ENUM(Feature)
     Q_DECLARE_FLAGS(Features, Feature);
