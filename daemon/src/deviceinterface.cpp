@@ -249,6 +249,16 @@ void DeviceInterface::onNotification(watchfish::Notification *notification)
     n.summary = notification->summary();
     n.body = notification->body();
 
+    // The watch gets a Reply action only if the posting app has an action that
+    // takes text. Otherwise the reply the user types goes nowhere.
+    const QStringList actions = notification->actions();
+    for (const QString& action : actions) {
+        if (notification->actionType(action) == QLatin1String("input")) {
+            n.canReply = true;
+            break;
+        }
+    }
+
     QVariantMap notificationSettings = AmazfishConfig::instance()->notificationSettings();
 
     bool enabled = true;

@@ -51,6 +51,7 @@ public slots:
     void onPropertiesChanged(QString interface, QVariantMap map, QStringList list);
     void onAnswerCallEvent();
     void onRejectCallEvent();
+    void onNotificationReplyRequested(qint32 notificationId, const QString& text);
     void onFindPhoneRequested();
     void onFindPhoneCancelled();
     void onMusicControlCommand(quint8 command);

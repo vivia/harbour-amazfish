@@ -59,6 +59,7 @@ public:
 
     quint64 when;                 // UNIX timestamp (seconds)
     bool hasActions;
+    bool canReply = false; // only when the app on the phone takes a text reply
     bool hasPicture;
 
     QElapsedTimer timestamp;
@@ -248,6 +249,7 @@ public slots:
 signals:
     void acceptIncomingCall();
     void rejectIncomingCall();
+    void notificationReplyRequested(qint32 notificationId, const QString& text);
 };
 
 #endif //_GARMINNOTIFICATIONHANDLER_H

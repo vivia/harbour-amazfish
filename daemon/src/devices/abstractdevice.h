@@ -99,6 +99,7 @@ public:
     Q_SIGNAL void connectionStateChanged();
     Q_SIGNAL void informationChanged(Amazfish::Info key, const QString& val);
     Q_SIGNAL void deviceEvent(Event event);
+    Q_SIGNAL void notificationReplyRequested(int notificationId, const QString& text);
     Q_SIGNAL void weatherRequested();
 
 protected:

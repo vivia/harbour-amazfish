@@ -38,6 +38,12 @@ void GarminNotificationControlMessage::parse(const QByteArray& data) {
             return;
         case (quint8) NotificationCommand::PERFORM_NOTIFICATION_ACTION:
             msg.data = data.mid(5);
+            // payload: [action byte][NUL-terminated UTF-8 action string]
+            if (msg.data.size() > 1) {
+                int nul = msg.data.indexOf('\0', 1);
+                int end = nul < 0 ? msg.data.size() : nul;
+                msg.actionString = QString::fromUtf8(msg.data.constData() + 1, end - 1);
+            }
             if (mCommunicator)mCommunicator->onNotificationPerformAction(msg);
             return;
 
