@@ -24,7 +24,8 @@ public:
         FEATURE_SCREENSHOT = 512,
         FEATURE_FILE_INSTALL = 1024,
         FEATURE_SPO2 = 2048,
-        FEATURE_AGPS = 4096
+        FEATURE_AGPS = 4096,
+        FEATURE_NOTIFICATIONREPLIES = 8192
     };
     Q_ENUM(Feature)
     Q_DECLARE_FLAGS(Features, Feature);
