@@ -264,6 +264,26 @@ QVariant DataSource::data(const Type type, const QDate &day)
                 qDebug() << "Error executing query";
             }
         }
+        // An empty summary range should not hide the last known value. Show
+        // the newest reading before the range instead, so the x axis tells how
+        // old it is. Only vo2max for now: it can go weeks without an update.
+        if (result.isEmpty() && type == DataSource::Vo2maxSummary && m_conn && m_conn->isDatabaseUsed()) {
+            qry = "SELECT date(vo2max_timestamp_dt), max(vo2max_value) FROM vo2max "
+                  "WHERE vo2max_timestamp_dt <= '"
+                + day.toString("yyyy-MM-ddT23:59:59") + "' GROUP BY date(vo2max_timestamp_dt)"
+                                                        " ORDER BY date(vo2max_timestamp_dt) DESC LIMIT 1";
+            qDebug() << qry;
+            KDbCursor* curs = m_conn->executeQuery(KDbEscapedString(qry));
+            if (curs) {
+                if (curs->open() && curs->moveFirst()) {
+                    QVariantMap pt;
+                    pt["x"] = curs->value(0).toDateTime().toMSecsSinceEpoch() / 1000;
+                    pt["y"] = curs->value(1).toDouble();
+                    result.append(pt);
+                }
+                m_conn->deleteCursor(curs);
+            }
+        }
     }
     return result;
 }
