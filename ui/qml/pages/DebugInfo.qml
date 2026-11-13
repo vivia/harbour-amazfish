@@ -455,6 +455,21 @@ PagePL {
                 }
             }
         }
+        TextSwitchPL {
+            id: chkGarminDeleteDownloads
+            width: parent.width
+            text: qsTr("Delete downloaded activity files from the watch (Garmin only)")
+
+            Component.onCompleted: {
+                chkGarminDeleteDownloads.checked = AmazfishConfig.deviceGarminDeleteDownloads;
+            }
+
+            onCheckedChanged: {
+                if (_ready) {
+                    AmazfishConfig.deviceGarminDeleteDownloads = checked;
+                }
+            }
+        }
         Connections {
             target: DaemonInterfaceInstance
             onDownloadProgress: {

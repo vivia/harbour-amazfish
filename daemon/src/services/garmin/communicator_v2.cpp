@@ -544,6 +544,9 @@ void CommunicatorV2::onFileTransferDataReceived(const FileTransferDataChunk& chu
     if (parseGarminFitFile(mFileBytes, fitMessages, fitError)) {
         logGarminFitSummary(fitMessages, mFileBytes.size());
         emit fileParsed(mRequestedEntry.dataType, mRequestedEntry.subType, mRequestedEntry.timestamp, fitMessages);
+        if (AmazfishConfig::instance()->deviceGarminDeleteDownloads()) {
+            sendMessage("SET FILE FLAG", GfdiMessageGenerator::setFileFlag(mRequestedEntry.fileIndex, FILE_FLAG_ARCHIVE));
+        }
     } else {
         qDebug() << Q_FUNC_INFO << "Garmin: cannot parse FIT file:" << fitError;
     }

@@ -410,3 +410,12 @@ QByteArray GfdiMessageGenerator::downloadRequest(quint16 fileIndex, qint32 dataS
     m.append(char(0));
     return wrapInGfdiEnvelope(MessageId::DownloadRequest, m);
 }
+
+QByteArray GfdiMessageGenerator::setFileFlag(quint16 fileIndex, quint8 fileFlags)
+{
+    // Body: [fileIndex][file flags].
+    QByteArray m;
+    writeU16le(m, fileIndex);
+    m.append(char(fileFlags));
+    return wrapInGfdiEnvelope(MessageId::SetFileFlag, m);
+}

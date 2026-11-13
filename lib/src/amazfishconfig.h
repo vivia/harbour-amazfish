@@ -158,6 +158,7 @@ public:
     BOOL_OPTION(QStringLiteral("device/displayweathershortcut"), deviceDisplayWeatherShortcut, setDeviceDisplayWeatherShortcut, true)
     BOOL_OPTION(QStringLiteral("device/displayalipayshortcut"),  deviceDisplayAliPayShortcut,  setDeviceDisplayAliPayShortcut,  true)
     BOOL_OPTION(QStringLiteral("device/garminsavedownloads"), deviceGarminSaveDownloads, setDeviceGarminSaveDownloads, false)
+    BOOL_OPTION(QStringLiteral("device/garmindeletedownloads"), deviceGarminDeleteDownloads, setDeviceGarminDeleteDownloads, false)
     STRING_OPTION(QStringLiteral("device/displayitems"),         deviceDisplayItems,           setDeviceDisplayItems,           "")
 
     ENUM_OPTION(QStringLiteral("device/language"),     deviceLanguage,     setDeviceLanguage,     DeviceLanguage,     DeviceLanguageEnUs)
