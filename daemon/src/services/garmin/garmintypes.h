@@ -379,6 +379,11 @@ struct DirectoryEntry {
     qint32 timestamp {};
 };
 
+// File flags for the SetFileFlag message (5008). ARCHIVE marks a downloaded
+// file as consumed: the watch drops it from the directory listing.
+const quint8 FILE_FLAG_ARCHIVE = 0x10;
+const quint8 FILE_FLAG_DELETE = 0x20;
+
 // Weather Request Message (5014)
 
 struct WeatherRequestMessage {

@@ -90,6 +90,7 @@ public:
     static QByteArray deviceSettings();
     static QByteArray systemEvent(quint8 eventType, quint8 value);
     static QByteArray downloadRequest(quint16 fileIndex, qint32 dataSize);
+    static QByteArray setFileFlag(quint16 fileIndex, quint8 fileFlags);
 };
 
 
