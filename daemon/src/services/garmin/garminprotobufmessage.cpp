@@ -33,9 +33,19 @@ QSharedPointer<GarminProtobufMessage> GarminProtobufMessage::parse()
     QByteArray messageBytes = data.mid(14,protobufDataLength);
 
     qDebug() << Q_FUNC_INFO << "Garmin: Protobuf request " << requestID << " total length " << totalProtobufLength << " << data " << messageBytes.toHex();
-    return QSharedPointer<GarminProtobufMessage>(new GarminProtobufMessage(mCommunicator, requestID, dataOffset, totalProtobufLength, protobufDataLength, messageBytes, false));
+    QSharedPointer<GarminProtobufMessage> message = QSharedPointer<GarminProtobufMessage>(new GarminProtobufMessage(mCommunicator, requestID, dataOffset, totalProtobufLength, protobufDataLength, messageBytes, false));
 
- }
+    // Gadgetbridge gives every incoming protobuf message a status. For an incomplete
+    // chunk that status names the request id and the offset, so the watch keeps the
+    // chunk and sends the next one. The plain Response(5000)+id+ACK is not enough:
+    // the watch then retransmits the first chunk under new ids forever.
+    // For a complete message Gadgetbridge sends the generic ACK here; handlers
+    // replace it once the message is parsed.
+    QSharedPointer<GarminProtobufStatusMessage> statusMessage = QSharedPointer<GarminProtobufStatusMessage>(
+        new GarminProtobufStatusMessage(Status::Ack, requestID, dataOffset, ProtobufChunkStatus::KEPT, ProtobufStatusCode::NO_ERROR));
+    message->setStatusMessage(statusMessage);
+    return message;
+}
 
 void GarminProtobufMessage::handleAuthenticationRequest(quint16 requestId) {
     qDebug() << Q_FUNC_INFO << "Garmin: Sending back 0 as we don't know what else to do";
@@ -124,6 +134,7 @@ QByteArray GarminProtobufMessage::getAckByteStream() {
 GarminProtobufStatusMessage::GarminProtobufStatusMessage(Status status, int requestId, int dataOffset, ProtobufChunkStatus chunkStatus, ProtobufStatusCode  code, bool sendoutgoing)
 {
     qDebug() << Q_FUNC_INFO;
+    mMessageType = MessageId::ProtobufRequest;
     mStatus = status;
     mRequestId=requestId;
     mDataOffset=dataOffset;
