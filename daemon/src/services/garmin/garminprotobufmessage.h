@@ -33,6 +33,8 @@ public:
     {
         mMessageBytes=data;
         mCommunicator=parent;
+        // Gadgetbridge always names the protobuf message (5043) this status answers.
+        mMessageType = MessageId::ProtobufRequest;
     }
 
     GarminProtobufStatusMessage(Status status, int requestId, int dataOffset, ProtobufChunkStatus chunktatus, ProtobufStatusCode  code, bool sendOutgoing=true);

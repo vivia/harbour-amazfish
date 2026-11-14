@@ -788,10 +788,9 @@ void CommunicatorV2::onProtobufMessageReceived( const QByteArray& data)
     qDebug() << Q_FUNC_INFO << "Garmin: Sendig Ackbytestream " << parsed->getAckByteStream().toHex();
     QByteArray statusStream = parsed->getAckByteStream();
     if (statusStream.isEmpty()) {
-        // Incomplete protobuf chunks get no protobuf status in Gadgetbridge either;
-        // it answers every incoming GFDI message with a generic Response ACK.
-        // Without that ACK the watch never sends the next chunk and retries the
-        // whole request with a new id forever.
+        // Fallback for messages that carry no status of their own. Chunked
+        // protobuf messages now get a protobuf status from the parse, which
+        // is what makes the watch send the next chunk.
         QByteArray ack;
         writeU16le(ack, quint16(MessageId::ProtobufRequest));
         ack.append(char(Status::Ack));
