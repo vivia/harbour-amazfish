@@ -193,7 +193,9 @@ Item {
             }
 
             Repeater {
-                model: noData ? 0 : (axisX.grid + 1)
+                // With one point the grid labels would repeat the same date.
+                // Show it once, on the left.
+                model: noData ? 0 : (points.length == 1 ? 1 : axisX.grid + 1)
                 delegate: LabelPL {
                     text: createXLabel(points[Math.round((index / axisX.grid ) * (points.length - 1))].x)
 
@@ -308,7 +310,14 @@ Item {
                             //accumulated path would get quadratic.
                             ctx.beginPath();
                             if (i === 0) {
-                                ctx.moveTo(x, y);
+                                if (end == 1) {
+                                    //A lone moveTo() strokes nothing. Draw the
+                                    //value as a line across the chart.
+                                    ctx.moveTo(0, y);
+                                    ctx.lineTo(width, y);
+                                } else {
+                                    ctx.moveTo(x, y);
+                                }
                             } else {
                                 ctx.moveTo(prevX, prevY);
                                 ctx.lineTo(x, y);
