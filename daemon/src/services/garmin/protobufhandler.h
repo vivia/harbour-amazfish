@@ -4,6 +4,7 @@
 #include "../devices/garmin/garmindevice.h"
 #include "communicator_v2.h"
 #include "garmingfdimessage.h"
+#include "garmintransferservice.h"
 
 #include <QObject>
 #include <QMap>
@@ -50,6 +51,7 @@ public:
 private:
     GarminDevice* mDevice;
     QMap<int, QSharedPointer<ProtobufFragment>> mChunkedFragmentsMap;
+    GarminDataTransferService mDataTransfers;
     int mMaxChunkSize = 375; //tested on Vívomove Style
     int mLastProtobufRequestId = 0;
     CommunicatorV2* mCommunicator;
@@ -57,7 +59,6 @@ private:
     void sendFakeOAuthResponse(int requestId);
     //AppConfigHandler appConfigHandler;
     //HttpHandler httpHandler;
-    //DataTransferHandler dataTransferHandler;
     //FileSyncServiceHandler fileSyncServiceHandler;
     //EcgServiceHandler ecgServiceHandler;
 

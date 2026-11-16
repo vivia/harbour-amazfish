@@ -16,7 +16,7 @@
 
 // Field numbers from gdi_http_service.proto.
 // HttpService: webRequest=1, webResponse=2, rawRequest=5, rawResponse=6, showURLNotification=11.
-// RawRequest: url=1, method=3, body=4, header=5 (repeated Header key=1 value=2), rawBody=7.
+// RawRequest: url=1, method=3, body=4, header=5 (repeated Header key=1 value=2), useDataXfer=6, rawBody=7.
 static const quint32 kFieldWebRequest = 1;
 static const quint32 kFieldWebResponse = 2;
 static const quint32 kFieldRawRequest = 5;
@@ -110,6 +110,12 @@ void GarminHttpServiceMessage::parseRawRequest(const QByteArray& data, HttpServi
             int methodLen;
             if (decodeVarint(fieldData, method, methodLen)) {
                 request.method = methodToString(method);
+            }
+        } else if (fieldNum == 6 && wireType == 0) {
+            quint64 useDataXfer;
+            int useDataXferLen;
+            if (decodeVarint(fieldData, useDataXfer, useDataXferLen)) {
+                request.useDataXfer = useDataXfer != 0;
             }
         } else if (fieldNum == 7 && wireType == 2) {
             request.rawBody = QString::fromUtf8(fieldData);
@@ -432,7 +438,13 @@ void GarminHttpServiceMessage::handleEphemerisRequest(quint16 requestId, const Q
     qDebug().noquote() << QStringLiteral("Garmin: Ephemeris response for %1, %2 bytes")
                               .arg(url.toString())
                               .arg(body.size());
-    sendRawResponse(requestId, body, headers, 200);
+    // The watch sets useDataXfer on ephemeris requests. It silently drops a body
+    // that arrives inline anyway, so the body must go through DataTransferService.
+    if (request.useDataXfer) {
+        sendDataXferResponse(requestId, body, headers, 200);
+    } else {
+        sendRawResponse(requestId, body, headers, 200);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -574,6 +586,61 @@ void GarminHttpServiceMessage::sendRawResponse(quint16 requestId, const QByteArr
     // Header is repeated: every entry needs its own field 5 element. Packing all
     // pairs into one element makes them merge into a single Header, and the watch
     // loses the etag it needs to store ephemeris data.
+    for (const QPair<QString, QString>& entry : headers) {
+        QByteArray header;
+        appendStringField(header, 1, entry.first);
+        appendStringField(header, 2, entry.second);
+        encodeFieldKey(inner, kFieldRrHeader, 2);
+        encodeVarint(inner, quint64(header.size()));
+        inner.append(header);
+    }
+
+    QByteArray httpService;
+    encodeFieldKey(httpService, kFieldRawResponse, 2);
+    encodeVarint(httpService, quint64(inner.size()));
+    httpService.append(inner);
+
+    // Smart.field2 = HttpService
+    QByteArray smart;
+    encodeFieldKey(smart, 2, 2);
+    encodeVarint(smart, quint64(httpService.size()));
+    smart.append(httpService);
+
+    if (mCommunicator) {
+        mCommunicator->sendProtobufResponse(smart, requestId);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Answer to a RawRequest that set useDataXfer: the body is registered with the
+// DataTransferService and only its id and size go into RawResponse.xferData
+// (field 4). The body itself follows in chunks when the watch asks for them.
+// Same shape as Gadgetbridge's createRawResponse data_xfer branch.
+// -----------------------------------------------------------------------------
+void GarminHttpServiceMessage::sendDataXferResponse(quint16 requestId, const QByteArray& body,
+    const QVector<QPair<QString, QString>>& headers, int httpStatus)
+{
+    if (!mTransfers) {
+        qWarning() << "Garmin: No data transfer service, sending body inline";
+        sendRawResponse(requestId, body, headers, httpStatus);
+        return;
+    }
+    const quint32 transferId = mTransfers->registerData(body);
+
+    QByteArray inner; // RawResponse
+    encodeFieldKey(inner, kFieldRrStatus, 0);
+    encodeVarint(inner, kStatusOk);
+    encodeFieldKey(inner, kFieldRrHttpStatus, 0);
+    encodeVarint(inner, quint64(httpStatus));
+    // DataTransferItem: id=1, size=2
+    QByteArray xferData;
+    encodeFieldKey(xferData, 1, 0);
+    encodeVarint(xferData, transferId);
+    encodeFieldKey(xferData, 2, 0);
+    encodeVarint(xferData, quint64(body.size()));
+    encodeFieldKey(inner, 4, 2);
+    encodeVarint(inner, quint64(xferData.size()));
+    inner.append(xferData);
     for (const QPair<QString, QString>& entry : headers) {
         QByteArray header;
         appendStringField(header, 1, entry.first);

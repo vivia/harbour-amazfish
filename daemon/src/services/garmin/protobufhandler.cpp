@@ -3,6 +3,7 @@
 #include "garmindevicestatusmessage.h"
 #include "garminhttpservicemessage.h"
 #include "garminprotobufmessage.h"
+#include "garmintransferservice.h"
 #include "garmintypes.h"
 #include "protobuftools.h"
 
@@ -142,8 +143,27 @@ QSharedPointer<GarminProtobufMessage> ProtobufHandler::processIncoming(QSharedPo
              if (decodeVarint(protobufPayload.mid(1), innerLength, lengthBytes)) {
                  processed = true;
                  qDebug() << Q_FUNC_INFO << "Garmin: Got http service message, length" << innerLength;
-                 GarminHttpServiceMessage msg(mCommunicator);
+                 GarminHttpServiceMessage msg(mCommunicator, &mDataTransfers);
                  msg.parse(protobufPayload.mid(1 + lengthBytes), message->getRequestId());
+             }
+         }
+         if (fieldNumber == 7 && wireType == 2) {
+             // DataTransferService: the watch pulls chunks of a body we offered
+             // as RawResponse.xferData. Answer with the chunk it asked for.
+             quint64 innerLength;
+             int lengthBytes;
+             if (decodeVarint(protobufPayload.mid(1), innerLength, lengthBytes)) {
+                 processed = true;
+                 QByteArray inner = protobufPayload.mid(1 + lengthBytes, int(innerLength));
+                 QByteArray answer = mDataTransfers.handleDownloadRequest(inner);
+                 if (!answer.isEmpty()) {
+                     // Smart.field7 = DataTransferService
+                     QByteArray smart;
+                     encodeFieldKey(smart, 7, 2);
+                     encodeVarint(smart, quint64(answer.size()));
+                     smart.append(answer);
+                     mCommunicator->sendProtobufResponse(smart, message->getRequestId());
+                 }
              }
          }
          if (fieldNumber == 27 && wireType == 2) {
@@ -288,6 +308,7 @@ void ProtobufHandler::reset()
     // Request ids restart at 1 on a new connection, so old fragments must not survive one.
     mChunkedFragmentsMap.clear();
     mLastProtobufRequestId = 0;
+    mDataTransfers.clear();
 }
 
 static QString randomAlphanumeric(int length)

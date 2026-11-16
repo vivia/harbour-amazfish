@@ -145,6 +145,7 @@ set(SOURCES
 ./src/services/garmin/garminauthnegotiationmessage.cpp
 ./src/services/garmin/garmincalendarmessage.cpp
 ./src/services/garmin/garminhttpservicemessage.cpp
+./src/services/garmin/garmintransferservice.cpp
 ./src/services/garmin/garminagpsfile.cpp
 ./src/services/garmin/garmingfdistatusmessage.cpp
 ./src/services/garmin/garminprotobufmessage.cpp
@@ -314,6 +315,7 @@ set(HEADERS
 ./src/services/garmin/garminauthnegotiationmessage.h
 ./src/services/garmin/garmincalendarmessage.h
 ./src/services/garmin/garminhttpservicemessage.h
+./src/services/garmin/garmintransferservice.h
 ./src/services/garmin/garminagpsfile.h
 ./src/services/garmin/garmingfdistatusmessage.h
 ./src/services/garmin/garminprotobufmessage.h
