@@ -2,13 +2,17 @@
 
 namespace {
 
-// FIT protocol global message numbers of the sleep records. 275 is from the
-// published FIT profile; 273 and 346 are Garmin-private, their field numbers
-// come from what the watches actually write.
+// FIT protocol global message numbers of the sleep records. 21 and 275 are
+// from the published FIT profile; 273 and 346 are Garmin-private, their field
+// numbers come from what the watches actually write.
+const quint16 FIT_MESSAGE_SLEEP_EVENT = 21;
 const quint16 FIT_MESSAGE_SLEEP_START = 273;
 const quint16 FIT_MESSAGE_SLEEP_LEVEL = 275;
 const quint16 FIT_MESSAGE_SLEEP_ASSESSMENT = 346;
 
+const quint8 FIT_SLEEP_EVENT_NUMBER = 0;
+const quint8 FIT_SLEEP_EVENT_NUMBER_SLEEP = 74;
+const quint8 FIT_SLEEP_EVENT_TIMESTAMP = 253;
 const quint8 FIT_SLEEP_START_TIMESTAMP = 253;
 const quint8 FIT_SLEEP_LEVEL_TIMESTAMP = 253;
 const quint8 FIT_SLEEP_LEVEL_STAGE = 0;
@@ -45,6 +49,30 @@ const GarminFitMessage* firstMessage(const QVector<GarminFitMessage>& messages, 
 QDateTime fitDateTime(const GarminFitFieldValue* field)
 {
     return QDateTime::fromMSecsSinceEpoch((field->raw + FIT_EPOCH_SECONDS) * 1000);
+}
+
+// Night start from the sleep event record: Garmin writes the published event
+// message with its own sleep event number, once when sleep starts and once
+// when it ends. The timestamps are UTC, and the stage rows always begin
+// after the night, so the earliest one is the night start.
+QDateTime sleepEventStart(const QVector<GarminFitMessage>& messages)
+{
+    QDateTime start;
+    for (const GarminFitMessage& message : messages) {
+        if (message.globalNumber != FIT_MESSAGE_SLEEP_EVENT) {
+            continue;
+        }
+        const GarminFitFieldValue* number = validField(message, FIT_SLEEP_EVENT_NUMBER);
+        const GarminFitFieldValue* timestamp = validField(message, FIT_SLEEP_EVENT_TIMESTAMP);
+        if (!number || number->raw != FIT_SLEEP_EVENT_NUMBER_SLEEP || !timestamp) {
+            continue;
+        }
+        const QDateTime eventStart = fitDateTime(timestamp);
+        if (!start.isValid() || eventStart < start) {
+            start = eventStart;
+        }
+    }
+    return start;
 }
 
 } // namespace
@@ -91,9 +119,14 @@ bool buildGarminSleepAssessment(const QVector<GarminFitMessage>& messages, QDate
         return false;
     }
 
-    // Use the first stage row as the night start. The sleep_start record only
-    // carries the time the watch wrote the file, not when sleep began, so it
-    // is the fallback for a file that has a score but no stage rows.
+    // Use the sleep event start as the night start. Fall back to the first
+    // stage row, then to the sleep_start record, which only carries the time
+    // the watch wrote the file and fits a file with a score but no stages.
+    start = sleepEventStart(messages);
+    if (start.isValid()) {
+        score = int(value->raw);
+        return true;
+    }
     QVector<GarminSleepSample> samples;
     if (buildGarminSleepSamples(messages, samples)) {
         start = samples.first().timestamp;

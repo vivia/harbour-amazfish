@@ -376,9 +376,12 @@ QList<DataSource::SleepSession> DataSource::calculateSleep(const QDate &day)
 }
 
 // Stage rows of the sleep table ("unmeasurable", "awake", "light", "deep",
-// "rem"), counted in the same day-boundary window as calculateSleep(). A row
-// is valid until the next row; the last row of a window has no successor and
-// is not counted. Returns false when the window has no rows at all.
+// "rem"), counted in the same day-boundary window as calculateSleep(). The
+// watch writes a row when a stage ends, so a row's stage ran from the
+// previous row until the row's own timestamp; the first row reaches back to
+// the night start stored in sleep_assessment. Only the time after the last
+// row of a window is unknown. Returns false when the window has no rows at
+// all.
 bool DataSource::calculateSleepStages(const QDate& day, SleepSession& session)
 {
     const QTime dayBoundary(AmazfishConfig::instance()->appSleepDayBoundary(), 0);
@@ -395,11 +398,20 @@ bool DataSource::calculateSleepStages(const QDate& day, SleepSession& session)
     long light = 0;
     long deep = 0;
     long rem = 0;
+    // Seed the first row's segment with the night start of this window.
     qint64 previousSample = 0;
-    QString previousStage;
     bool haveRows = false;
 
     if (m_conn && m_conn->isDatabaseUsed()) {
+        KDbCursor* anchorCurs = m_conn->executeQuery(KDbEscapedString(
+            "SELECT MIN(sleep_assessment_timestamp) FROM sleep_assessment WHERE sleep_assessment_timestamp >= "
+            + QString::number(startSec) + " AND sleep_assessment_timestamp < " + QString::number(endSec)));
+        if (anchorCurs) {
+            if (anchorCurs->open() && anchorCurs->moveFirst()) {
+                previousSample = anchorCurs->value(0).toLongLong();
+            }
+            m_conn->deleteCursor(anchorCurs);
+        }
         KDbCursor* curs = m_conn->executeQuery(KDbEscapedString(qry));
 
         if (curs) {
@@ -408,18 +420,17 @@ bool DataSource::calculateSleepStages(const QDate& day, SleepSession& session)
                     qint64 d = curs->value(0).toLongLong();
                     QString stage = curs->value(1).toString();
 
-                    if (previousSample != 0) {
+                    if (previousSample != 0 && d > previousSample) {
                         long duration = d - previousSample;
-                        if (previousStage == "light") {
+                        if (stage == "light") {
                             light += duration;
-                        } else if (previousStage == "deep") {
+                        } else if (stage == "deep") {
                             deep += duration;
-                        } else if (previousStage == "rem") {
+                        } else if (stage == "rem") {
                             rem += duration;
                         }
                     }
                     previousSample = d;
-                    previousStage = stage;
                     haveRows = true;
                     curs->moveNext();
                 }
