@@ -553,12 +553,6 @@ void GarminHttpServiceMessage::sendErrorResponse(quint16 requestId, bool webRequ
 void GarminHttpServiceMessage::sendRawResponse(quint16 requestId, const QByteArray& body,
     const QVector<QPair<QString, QString>>& headers, int httpStatus)
 {
-    QByteArray header;
-    for (const QPair<QString, QString>& entry : headers) {
-        appendStringField(header, 1, entry.first);
-        appendStringField(header, 2, entry.second);
-    }
-
     QByteArray inner; // RawResponse
     encodeFieldKey(inner, kFieldRrStatus, 0);
     encodeVarint(inner, kStatusOk);
@@ -569,9 +563,17 @@ void GarminHttpServiceMessage::sendRawResponse(quint16 requestId, const QByteArr
         encodeVarint(inner, quint64(body.size()));
         inner.append(body);
     }
-    encodeFieldKey(inner, kFieldRrHeader, 2);
-    encodeVarint(inner, quint64(header.size()));
-    inner.append(header);
+    // Header is repeated: every entry needs its own field 5 element. Packing all
+    // pairs into one element makes them merge into a single Header, and the watch
+    // loses the etag it needs to store ephemeris data.
+    for (const QPair<QString, QString>& entry : headers) {
+        QByteArray header;
+        appendStringField(header, 1, entry.first);
+        appendStringField(header, 2, entry.second);
+        encodeFieldKey(inner, kFieldRrHeader, 2);
+        encodeVarint(inner, quint64(header.size()));
+        inner.append(header);
+    }
 
     QByteArray httpService;
     encodeFieldKey(httpService, kFieldRawResponse, 2);
