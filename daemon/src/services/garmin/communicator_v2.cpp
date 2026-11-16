@@ -119,7 +119,7 @@ bool CommunicatorV2::initializeDevice() {
     qDebug() <<Q_FUNC_INFO << "Garmin: initalizing device";
 
     QMap<QString, QSharedPointer<QBLECharacteristic>> characteristicMap;
-
+    QMap<QString, QString> characteristicPaths;
 
     QDBusInterface miIntro("org.bluez", m_Path, "org.freedesktop.DBus.Introspectable", QDBusConnection::systemBus(), 0);
     QDBusReply<QString> xml = miIntro.call("Introspect");
@@ -137,7 +137,9 @@ bool CommunicatorV2::initializeDevice() {
         if (nodeName.startsWith("char")) {
             QString path = m_Path + "/" + nodeName;
             QDBusInterface charInterface("org.bluez", path, "org.bluez.GattCharacteristic1", QDBusConnection::systemBus(), 0);
-            characteristicMap[charInterface.property("UUID").toString()] = QSharedPointer<QBLECharacteristic>(new QBLECharacteristic(path, this));
+            QString uuid = charInterface.property("UUID").toString();
+            characteristicMap[uuid] = QSharedPointer<QBLECharacteristic>(new QBLECharacteristic(path, this));
+            characteristicPaths[uuid] = path;
         }
     }
 
@@ -194,6 +196,22 @@ bool CommunicatorV2::initializeDevice() {
 
     if ((mState->characteristicSend != NULL) && (mState->characteristicReceive  != NULL)) {
         qDebug() << Q_FUNC_INFO << "Garmin: Characteristic found. Send " << mState->UUIDSend << ", Receive " << mState->UUIDReceive;
+
+        // Use the ATT MTU BlueZ negotiated on this connection. Without the MTU
+        // property (older BlueZ) the 20 byte default stays.
+        const QString sendCharPath = characteristicPaths.value(mState->UUIDSend);
+        if (!sendCharPath.isEmpty()) {
+            QDBusInterface sendInterface("org.bluez", sendCharPath, "org.bluez.GattCharacteristic1",
+                QDBusConnection::systemBus(), 0);
+            const QVariant mtu = sendInterface.property("MTU");
+            if (mtu.isValid()) {
+                qDebug() << Q_FUNC_INFO << "Garmin: ATT MTU" << mtu.toUInt();
+                onMtuChanged(mtu.toUInt());
+            } else {
+                qDebug() << Q_FUNC_INFO << "Garmin: BlueZ exports no MTU property, keeping default write size";
+            }
+        }
+
         enableNotification(mState->UUIDReceive);
         connect(this, &QBLEService::characteristicChanged, this, &CommunicatorV2::onCharacteristicChanged,
             Qt::UniqueConnection);
@@ -268,10 +286,10 @@ bool CommunicatorV2::sendMessage(const QString& taskName, const QByteArray& mess
 
     const QByteArray framed = CobsCoDec::encode(message);
 
-    // We don't negotiate a larger ATT MTU, and BlueZ's automatic long-write
-    // queueing can't be relied on across devices, so fragment defensively at
-    // a safe default MTU write size - same approach Gadgetbridge always
-    // uses (CommunicatorV1/V2.sendMessage), regardless of whether a given
+    // BlueZ's automatic long-write queueing can't be relied on across
+    // devices, so fragment defensively at the negotiated MTU write size
+    // (maxWriteSize) - same approach Gadgetbridge always uses
+    // (CommunicatorV1/V2.sendMessage), regardless of whether a given
     // message happens to be small enough to not need it.
 
     const int handlePrefixSize = mIsMlProtocol ? 1 : 0;
