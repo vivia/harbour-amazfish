@@ -375,6 +375,14 @@ void GarminHttpServiceMessage::handleEphemerisRequest(quint16 requestId, const Q
         return;
     }
 
+    // Keep the age the watch reports for its own copy, for the debug screen.
+    const QString ageHeader = headerValue(request, QStringLiteral("ephemeris-age"));
+    bool ageOk = false;
+    const qint64 watchAge = ageHeader.toLongLong(&ageOk);
+    if (ageOk && mCommunicator) {
+        mCommunicator->noteEphemerisAge(kind == GarminAgpsFile::Kind::Constellations, watchAge);
+    }
+
     const QString dir = GarminAgpsFile::dirPath();
     QDir().mkpath(dir);
     const QString filePath = QDir(dir).filePath(GarminAgpsFile::fileName(kind));

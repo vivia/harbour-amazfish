@@ -1130,6 +1130,9 @@ QString GarminDevice::information(Amazfish::Info i) const
     case Amazfish::Info::INFO_AGPS_CONSTELLATIONS:
         return GarminAgpsFile::describe(GarminAgpsFile::Kind::Constellations);
         break;
+    case Amazfish::Info::INFO_AGPS_WATCH_AGE:
+        return mCommunicator.data()->watchEphemerisAges();
+        break;
     default:
         return QString("");
     }

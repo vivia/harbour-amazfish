@@ -1440,6 +1440,29 @@ void CommunicatorV2::setBatteryLevel(quint8 val)
     }
 }
 
+void CommunicatorV2::noteEphemerisAge(bool constellations, qint64 age)
+{
+    if (constellations) {
+        mEphemerisAgeConstellations = age;
+    } else {
+        mEphemerisAge7days = age;
+    }
+    emit informationChanged(Amazfish::Info::INFO_AGPS_WATCH_AGE, watchEphemerisAges());
+}
+
+QString CommunicatorV2::watchEphemerisAges() const
+{
+    if (mEphemerisAge7days < 0 && mEphemerisAgeConstellations < 0) {
+        return QString();
+    }
+    const QString seven = mEphemerisAge7days < 0 ? QStringLiteral("-")
+                                                 : QString::number(mEphemerisAge7days) + QStringLiteral(" s");
+    const QString constellations = mEphemerisAgeConstellations < 0
+        ? QStringLiteral("-")
+        : QString::number(mEphemerisAgeConstellations) + QStringLiteral(" s");
+    return QStringLiteral("7days %1, constellations %2").arg(seven, constellations);
+}
+
 void CommunicatorV2::saveHRVRecord()
 {
     // This will probably be never used as the proper way is downloading activities

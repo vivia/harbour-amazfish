@@ -123,6 +123,16 @@ PagePL {
             onCopied: agpsMarkCopied()
         }
         LabelPL {
+            id: lblAgpsWatchAge
+            visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS)
+                && DaemonInterfaceInstance.information(Amazfish.INFO_AGPS_WATCH_AGE) != ""
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: qsTr("Watch Ephemeris-Age: ")
+                + DaemonInterfaceInstance.information(Amazfish.INFO_AGPS_WATCH_AGE)
+            color: styler.themeSecondaryHighlightColor
+        }
+        LabelPL {
             id: agpsCopyHint
             visible: supportsFeatureRefresh(Amazfish.FEATURE_AGPS) && urlAgps7days.copyable
             width: parent.width
@@ -500,6 +510,10 @@ PagePL {
                     break;
                     case Amazfish.INFO_AGPS_CONSTELLATIONS:
                     lblAgpsConstellations.text = qsTr("aGPS constellations: ") + infoValue;
+                    break;
+                    case Amazfish.INFO_AGPS_WATCH_AGE:
+                    lblAgpsWatchAge.text = qsTr("Watch Ephemeris-Age: ") + infoValue;
+                    lblAgpsWatchAge.visible = infoValue != "";
                     break;
                     case Amazfish.INFO_MODEL:
                     lblModel.text = qsTr("Model: ") +infoValue;

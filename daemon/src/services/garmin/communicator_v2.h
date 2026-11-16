@@ -198,6 +198,10 @@ public:
     quint16 HRV() {return mHRV;};
     quint8 spo2() {return mSpo2;};
     struct deviceInfo deviceInfo() {return mDeviceInfo;};
+
+    // Ephemeris-Age header of the watch's last request, for the debug screen.
+    void noteEphemerisAge(bool constellations, qint64 age);
+    QString watchEphemerisAges() const;
     quint8 batteryLevel() {return mBatteryLevel;};
     bool isConnected() {return mConnected;};
     bool handshakeComplete() {return !isFirstConnect;};
@@ -342,6 +346,8 @@ private:
     QFile mFileOut;
     QString mFileTransferPath;
     QVector<DirectoryEntry> mDirectory;
+    qint64 mEphemerisAge7days = -1;
+    qint64 mEphemerisAgeConstellations = -1;
     // One queue per file category on the watch. A category is one directory
     // type and subtype, with its own config stamp for the last saved file.
     struct FileCategory {

@@ -46,7 +46,8 @@ public:
         INFO_IMMEDIATE_ALERT,
         INFO_SPO2,
         INFO_AGPS_7DAYS,
-        INFO_AGPS_CONSTELLATIONS
+        INFO_AGPS_CONSTELLATIONS,
+        INFO_AGPS_WATCH_AGE
     };
     Q_ENUM(Info)
 
