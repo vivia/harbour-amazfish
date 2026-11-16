@@ -277,7 +277,10 @@ void CommunicatorV2::processSendQueue()
 
     mSendInProgress = false;
     if (errorMsg.isEmpty() && !mSendQueue.isEmpty()) {
-        processSendQueue();
+        // writeValue blocks on its D-Bus round trip; calling this function
+        // again directly starves other timers until the queue drains, so
+        // re-enter the event loop between writes.
+        QTimer::singleShot(0, this, &CommunicatorV2::processSendQueue);
     }
 }
 
