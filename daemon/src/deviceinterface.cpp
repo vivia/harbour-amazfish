@@ -271,6 +271,20 @@ void DeviceInterface::onNotification(watchfish::Notification *notification)
             break;
         }
     }
+#ifdef UUITK_EDITION
+    // Lomiri posts SMS notifications without an input action; the daemon
+    // sends the reply itself through lomiri-telephony-service instead.
+    if (notification->appId() == QLatin1String("Lomiri Telephony Service Indicator")) {
+        n.canReply = true;
+        // Keep the summary: the notification is often gone when the reply
+        // typed on the watch finally arrives.
+        m_smsSummaries.insert(n.id, n.summary);
+        m_smsSummaryIds.append(n.id);
+        while (m_smsSummaryIds.size() > 10) {
+            m_smsSummaries.remove(m_smsSummaryIds.dequeue());
+        }
+    }
+#endif
 
     QVariantMap notificationSettings = AmazfishConfig::instance()->notificationSettings();
 

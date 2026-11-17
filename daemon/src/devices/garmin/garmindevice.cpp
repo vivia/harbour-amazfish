@@ -50,8 +50,10 @@ Amazfish::Features GarminDevice::supportedFeatures() const
         | Amazfish::Feature::FEATURE_ALERT
         | Amazfish::Feature::FEATURE_WEATHER;
 
-    // Replying uses x-nemo remote actions, only posted on Sailfish OS notifications.
-#ifdef MER_EDITION_SAILFISH
+    // Sailfish OS posts x-nemo remote actions, so the reply is replayed to
+    // the posting app. On Ubuntu Touch the daemon sends SMS replies through
+    // lomiri-telephony-service itself, for SMS notifications only.
+#if defined(MER_EDITION_SAILFISH) || defined(UUITK_EDITION)
     features |= Amazfish::Feature::FEATURE_NOTIFICATIONREPLIES;
 #endif
 

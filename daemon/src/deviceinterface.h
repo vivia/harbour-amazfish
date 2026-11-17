@@ -2,10 +2,11 @@
 #ifndef DEVICEINTERFACE_H
 #define DEVICEINTERFACE_H
 
+#include <QHash>
 #include <QObject>
-#include <QtSql/QtSql>
 #include <QQueue>
 #include <QTimer>
+#include <QtSql/QtSql>
 
 #include <KDb3/KDbDriver>
 #include <KDb3/KDbConnection>
@@ -158,6 +159,12 @@ private:
 
     //Notifications
     QQueue<Amazfish::WatchNotification> m_notificationBuffer;
+#ifdef UUITK_EDITION
+    // Lomiri expires notifications long before a reply typed on the watch
+    // arrives. SMS replies only need the sender number, so keep the summaries.
+    QHash<uint, QString> m_smsSummaries;
+    QQueue<uint> m_smsSummaryIds;
+#endif
 
     //Database
     KDbDriver *m_dbDriver = nullptr;
