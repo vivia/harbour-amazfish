@@ -145,6 +145,10 @@ private:
 
     void sendBufferedNotifications();
     void scheduleNextEvent();
+#ifdef UUITK_EDITION
+    void sendSmsReply(int notificationId, const QString& context, const QString& summary,
+        const QString& text);
+#endif
 
     //Watchfish
     watchfish::MusicController m_musicController;
