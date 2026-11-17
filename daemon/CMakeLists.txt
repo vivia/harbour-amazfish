@@ -342,6 +342,13 @@ if(FLAVOR STREQUAL "silica")
         ./src/telepathysmssender.h)
 endif()
 
+if(FLAVOR STREQUAL "uuitk")
+    set(SOURCES ${SOURCES}
+        ./src/lomirismssender.cpp)
+    set(HEADERS ${HEADERS}
+        ./src/lomirismssender.h)
+endif()
+
 add_executable(harbour-amazfishd ${SOURCES} ${HEADERS}
 )
 
