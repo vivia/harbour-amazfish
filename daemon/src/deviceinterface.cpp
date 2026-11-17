@@ -29,6 +29,11 @@ using namespace UserMetricsInput;
 #include "telepathysmssender.h"
 #endif
 
+#ifdef UUITK_EDITION
+#include "lomirismssender.h"
+#include <QRegularExpression>
+#endif
+
 static const char *SERVICE = SERVICE_NAME_AMAZFISH;
 static const char *PATH = "/application";
 
@@ -319,6 +324,15 @@ void DeviceInterface::onNotificationReplyRequested(int notificationId, const QSt
 {
     // The watch asked to reply to a notification it received from the phone.
     // Reply through the notification's own input action, no app specific knowledge.
+#ifdef UUITK_EDITION
+    // The Lomiri server expires notifications within seconds, so the SMS
+    // summary kept at arrival time is usually the only one left.
+    if (m_smsSummaries.contains(notificationId)) {
+        sendSmsReply(notificationId, tr("notification %1").arg(notificationId),
+            m_smsSummaries.value(notificationId), text);
+        return;
+    }
+#endif
     watchfish::Notification* notification = m_notificationMonitor.getNotification(notificationId);
     if (!notification) {
         qDebug() << Q_FUNC_INFO << "notification" << notificationId << "is no longer open";
@@ -326,6 +340,15 @@ void DeviceInterface::onNotificationReplyRequested(int notificationId, const QSt
             tr("the notification is no longer open on the phone"));
         return;
     }
+
+#ifdef UUITK_EDITION
+    // The Lomiri SMS notification has no input action to replay; send the
+    // reply through lomiri-telephony-service, as the messaging app does.
+    if (notification->appId() == QLatin1String("Lomiri Telephony Service Indicator")) {
+        sendSmsReply(notificationId, notification->appName(), notification->summary(), text);
+        return;
+    }
+#endif
 
     const QStringList actions = notification->actions();
     for (const QString& action : actions) {
@@ -370,6 +393,35 @@ void DeviceInterface::onNotificationReplyRequested(int notificationId, const QSt
     qDebug() << Q_FUNC_INFO << "notification" << notificationId << "has no input action";
     notifyReplyFailed(notification->appName(), tr("the app does not accept replies"));
 }
+
+#ifdef UUITK_EDITION
+void DeviceInterface::sendSmsReply(int notificationId, const QString& context,
+    const QString& summary, const QString& text)
+{
+    // The sender number and the SIM marker live in the summary, in the
+    // form "+35712345678 - [SIM 1]". SIM 1 is the modem /ril_0, so its
+    // Mission Control account is ofono/ofono/ril_0.
+    QRegularExpression re(QStringLiteral("^(\\+\\S+)(?: - \\[SIM (\\d+)\\])?$"));
+    QRegularExpressionMatch match = re.match(summary);
+    if (!match.hasMatch()) {
+        notifyReplyFailed(context, tr("the sender number is unknown"));
+        return;
+    }
+    int simSlot = match.captured(2).isEmpty() ? 1 : match.captured(2).toInt();
+    if (simSlot < 1) {
+        simSlot = 1;
+    }
+    const QString number = match.captured(1);
+    const QString account = QStringLiteral("ofono/ofono/ril_%1").arg(simSlot - 1);
+    qDebug() << Q_FUNC_INFO << "replying to notification" << notificationId
+             << "via telephony service to" << number << account;
+    QPointer<LomiriSmsSender> sender = LomiriSmsSender::send(account, number, text, this);
+    connect(sender.data(), &LomiriSmsSender::failureSignal, this,
+        [this](const QString& number, const QString& error) {
+            notifyReplyFailed(number, error);
+        });
+}
+#endif
 
 void DeviceInterface::notifyReplyFailed(const QString& context, const QString& error)
 {
