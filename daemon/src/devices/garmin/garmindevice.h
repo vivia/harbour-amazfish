@@ -40,7 +40,18 @@ public:
     void incomingCall(const QString &caller) override;
     void incomingCallEnded() override;
     void setMusicStatus(bool playing, const QString& title, const QString& artist, const QString& album, int duration = 0, int position = 0) override;
-
+    bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
+    bool saveSleepMessages(const QVector<GarminFitMessage>& messages);
+    bool saveSleepData(const QVector<GarminSleepSample>& samples, const QDateTime& assessmentStart, int score);
+    bool saveHrvMessages(const QVector<GarminFitMessage>& messages);
+    bool saveHrvData(const QVector<GarminHrvSample>& samples);
+    bool saveMonitorMessages(const QVector<GarminFitMessage>& messages);
+    bool saveMonitorData(const QVector<GarminMonitorSample>& samples);
+    bool saveSpo2Data(const QVector<GarminSpo2Sample>& samples);
+    bool saveStressData(const QVector<GarminStressSample>& samples);
+    bool saveDailyCaloriesData(const QVector<GarminDailyCaloriesSample>& samples);
+    bool saveMetricsMessages(const QVector<GarminFitMessage>& messages);
+    bool saveVo2maxData(const QVector<GarminVo2maxSample>& samples);
     AbstractFirmwareInfo *firmwareInfo(const QByteArray &bytes, const QString &path) override;
     Q_SLOT void authenticated(bool ready);
 
@@ -65,19 +76,7 @@ private:
     void initialise();
     void onWeatherRequestReceived();
     void sendWeatherToWatch();
-    void onFileParsed(quint8 type, quint8 subType, qint32 stamp, const QVector<GarminFitMessage>& messages);
-    bool saveActivityMessages(const QVector<GarminFitMessage>& messages);
-    bool saveSleepMessages(const QVector<GarminFitMessage>& messages);
-    bool saveSleepData(const QVector<GarminSleepSample>& samples, const QDateTime& assessmentStart, int score);
-    bool saveHrvMessages(const QVector<GarminFitMessage>& messages);
-    bool saveHrvData(const QVector<GarminHrvSample>& samples);
-    bool saveMonitorMessages(const QVector<GarminFitMessage>& messages);
-    bool saveMonitorData(const QVector<GarminMonitorSample>& samples);
-    bool saveSpo2Data(const QVector<GarminSpo2Sample>& samples);
-    bool saveStressData(const QVector<GarminStressSample>& samples);
-    bool saveDailyCaloriesData(const QVector<GarminDailyCaloriesSample>& samples);
-    bool saveMetricsMessages(const QVector<GarminFitMessage>& messages);
-    bool saveVo2maxData(const QVector<GarminVo2maxSample>& samples);
+
     void rescanNextFile();
     virtual void refreshInformation() override;
 

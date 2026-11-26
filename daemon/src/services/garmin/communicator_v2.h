@@ -21,6 +21,7 @@
 #include "garminprotobufmessage.h"
 #include "garmintypes.h"
 #include "weather/currentweather.h"
+#include "garminfilehandler.h"
 
 #include <KDbConnection.h>
 #include <qbledevice.h>
@@ -30,6 +31,7 @@
 
 //forward declarations
 class ProtobufHandler;
+class GarminFileHandler;
 
 // =============================================================================
 // Constants
@@ -37,22 +39,7 @@ class ProtobufHandler;
 static constexpr const char* BASE_UUID_FORMAT = "6A4E%04X-667B-11E3-949A-0800200C9A66";
 static constexpr quint64 AMAZFISH_CLIENT_ID = 2;
 
-// Directory entry type and subtype of the file categories this service
-// downloads. FIT activities, sleep files, HRV status files, monitoring files
-// and metrics files are all in directory type 128.
-const quint8 DIR_TYPE_FIT = 128;
-const quint8 DIR_SUBTYPE_ACTIVITY = 4;
-const quint8 DIR_SUBTYPE_SLEEP = 49;
-const quint8 DIR_SUBTYPE_HRV = 68;
-const quint8 DIR_SUBTYPE_MONITOR = 32;
-const quint8 DIR_SUBTYPE_METRICS = 44;
-// Config keys of the saved stamp per category, in seconds on the watch's own
-// epoch. Written by GarminDevice::onFileParsed() after a file was processed.
-extern const char* STAMP_ACTIVITY;
-extern const char* STAMP_SLEEP;
-extern const char* STAMP_HRV;
-extern const char* STAMP_MONITOR;
-extern const char* STAMP_METRICS;
+
 struct deviceInfo {
 
     QString softwareRevision;
@@ -154,13 +141,6 @@ public:
     // Reports the watch's answer to a FIT message we sent.
     void onFitStatusReceived(MessageId messageId, quint8 status, quint8 subStatus);
 
-    // Ask the watch for its root directory. Everything else in a file transfer follows from the
-    // listing, so this is also where a phone-initiated fetch starts.
-    // Returns false when a file transfer is already running.
-    bool requestDirectoryListing();
-    // Directory that debug downloads are saved to. Public so the device can
-    // rescan the files it kept.
-    QString garminFileDir();
 
     //  register_service / close_service
     void registerService(Service service, bool reliable);
@@ -199,9 +179,6 @@ public:
     quint8 spo2() {return mSpo2;};
     struct deviceInfo deviceInfo() {return mDeviceInfo;};
 
-    // Ephemeris-Age header of the watch's last request, for the debug screen.
-    void noteEphemerisAge(bool constellations, qint64 age);
-    QString watchEphemerisAges() const;
     quint8 batteryLevel() {return mBatteryLevel;};
     bool isConnected() {return mConnected;};
     bool handshakeComplete() {return !isFirstConnect;};
@@ -218,6 +195,12 @@ public:
     // Such a watch reads the JSON answers, not FIT weather records.
     void noteHttpWeatherRequest() { mHttpWeatherSeen = true; }
     bool httpWeatherSeen() const { return mHttpWeatherSeen; }
+    // Ephemeris-Age header of the watch's last request, for the debug screen.
+    void noteEphemerisAge(bool constellations, qint64 age);
+    QString watchEphemerisAges() const;
+    //Request Data from watch
+    bool fetchData();
+    QString garminFileDir();
 
 signals:
     void logDebug(const QString& msg);
@@ -235,10 +218,6 @@ signals:
     // picked in the UI, not with the coordinates in the request, so the
     // request itself is not passed on.
     void weatherRequestReceived();
-    // A downloaded file was parsed. fileStamp is the file time from the watch's
-    // directory entry, used to remember what was saved already. The type and
-    // subtype say which category the file came from.
-    void fileParsed(quint8 dataType, quint8 subType, qint32 fileStamp, const QVector<GarminFitMessage>& messages);
     // The watch asked the paired phone to make a sound, or to stop.
     void findPhoneRequested();
     void findPhoneCancelled();
@@ -301,6 +280,8 @@ private:
 
     QSharedPointer<CommunicatorState> mState;
     QSharedPointer<ProtobufHandler> mProtobufHandler;
+    QSharedPointer<GarminFileHandler> mFileHandler;
+
     QString m_Path;
     QObject *m_device = nullptr;
     bool isFirstConnect=true;
@@ -330,46 +311,12 @@ private:
     quint8 mSynchronizationType = 0;
     quint64 mFileTypeBitmask = 0;
 
-    // Classic GFDI file download. Files are buffered in RAM, so a size cap keeps the transfer
-    // safe. deviceGarminSaveDownloads keeps a copy of the raw bytes for re-parsing.
-    enum class FileTransferState {
-        Idle,
-        WaitingDirStatus,
-        ReceivingDir,
-        WaitingFileStatus,
-        ReceivingFile
-    };
-    FileTransferState mFileTransferState = FileTransferState::Idle;
-    QByteArray mFileBytes;
-    qint32 mFileExpectedSize = 0;
-    quint16 mFileRunningCrc = 0;
-    QFile mFileOut;
-    QString mFileTransferPath;
-    QVector<DirectoryEntry> mDirectory;
-    qint64 mEphemerisAge7days = -1;
-    qint64 mEphemerisAgeConstellations = -1;
-    // One queue per file category on the watch. A category is one directory
-    // type and subtype, with its own config stamp for the last saved file.
-    struct FileCategory {
-        quint8 dataType;
-        quint8 subType;
-        const char* name; // used in logs and debug file names
-        const char* stampKey;
-        QVector<DirectoryEntry> pending;
-    };
-    QVector<FileCategory> mFileCategories;
-    DirectoryEntry mRequestedEntry;
-    int mRequestedCategory = -1;
-
-    void openDebugFile(const QString& name);
-    void logDirectoryEntries();
-    const char* categoryName(int index) const;
-    void clearPendingFiles();
-    void startFileDownloads();
-    void requestNextFile();
     QQueue<QPair<QByteArray, QString>> mSendQueue;
     bool  mSendInProgress = false;
     int mSendRetries = 0;
+
+    qint64 mEphemerisAge7days = -1;
+    qint64 mEphemerisAgeConstellations = -1;
 };
 
 #endif //_COMMUNICATOR__H

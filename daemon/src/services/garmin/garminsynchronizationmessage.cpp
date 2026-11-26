@@ -36,6 +36,7 @@ void GarminSynchronizationMessage::parse(const QByteArray& data)
         //should proceed
         qDebug() << Q_FUNC_INFO << "Garmin: Synchronization should proceed";
         // Now should send filter message
+        // 0 = no filter, 1 = default filter, 3 = only pending upload
         sendFilterMessage(3);
     }
 }
