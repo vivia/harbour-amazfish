@@ -182,6 +182,13 @@ QSharedPointer<GarminProtobufMessage> ProtobufHandler::processIncoming(QSharedPo
                  }
              }
          }
+         if (fieldNumber == 43 && wireType == 2) {
+             // File Access Service
+             // This is the new sync protocol used by some watches
+             // In Gadgetbridge, this needs to be enabled in the settings as it's experimental
+             // We haven't implemented this yet, but might be needed to get all data from current watches.
+             qDebug() << Q_FUNC_INFO << "Garmin: Watch offers new sync protocol, ignoring for now.";
+         }
          if (processed) {
              qDebug() << Q_FUNC_INFO << "Garmin: Add ACK with No error";
 

@@ -14,9 +14,9 @@ public:
     }
     void parse(const QByteArray& data);
     QByteArray generateOutgoing(const QByteArray& data);
+    void sendFilterMessage(quint8 filterType);
 private:
     void sendSynchronizationAck();
-    void sendFilterMessage(quint8 filterType);
 };
 
 #endif // GARMINSYNCHRONIZATIONMESSAGE_H

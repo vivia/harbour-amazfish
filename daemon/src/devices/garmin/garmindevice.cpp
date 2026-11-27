@@ -297,13 +297,12 @@ QBLEService *GarminDevice::drv_createService(const QString &uuid, const QString 
         qDebug() << Q_FUNC_INFO << "Garmin: Adding notification handler";
         if (!mNotificationHandler)
             mNotificationHandler = QSharedPointer<GarminNotificationHandler>::create(mCommunicator);
-        connect(com.data(), &CommunicatorV2::NotificationDataRequested, mNotificationHandler.data(), &GarminNotificationHandler::onNotificationDataRequested);
+       connect(com.data(), &CommunicatorV2::NotificationDataRequested, mNotificationHandler.data(), &GarminNotificationHandler::onNotificationDataRequested);
         connect(com.data(), &CommunicatorV2::NotificationPerformAction, mNotificationHandler.data(), &GarminNotificationHandler::onNotificationPerformAction);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::acceptIncomingCall, this, &GarminDevice::onAnswerCallEvent);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::rejectIncomingCall, this, &GarminDevice::onRejectCallEvent);
         connect(mNotificationHandler.data(), &GarminNotificationHandler::notificationReplyRequested, this, &GarminDevice::onNotificationReplyRequested);
         connect(com.data(), &CommunicatorV2::weatherRequestReceived, this, &GarminDevice::onWeatherRequestReceived, Qt::UniqueConnection);
-        connect(com.data(), &CommunicatorV2::fileParsed, this, &GarminDevice::onFileParsed, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneRequested, this, &GarminDevice::onFindPhoneRequested, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::findPhoneCancelled, this, &GarminDevice::onFindPhoneCancelled, Qt::UniqueConnection);
         connect(com.data(), &CommunicatorV2::musicControlCommand, this, &GarminDevice::onMusicControlCommand, Qt::UniqueConnection);
@@ -384,108 +383,18 @@ void GarminDevice::sendWeatherToWatch()
 
 void GarminDevice::fetchData(Amazfish::DataTypes dataTypes)
 {
+    if (!mCommunicator) return;
+    /*
     if (!(dataTypes & Amazfish::DataType::TYPE_ACTIVITY) || !mCommunicator) {
         return;
     }
-    // The watch answers with a file list; the newest activity is what we want from it.
-    if (!mCommunicator->requestDirectoryListing()) {
-        emit message(tr("An operation is currently running, please try later"));
-    }
-}
+    */
+    // As we do not filter in the fetchData() operation, we should continue no matter what data type is requested
+    // Get Data from Debug Data requests DataType None, for example
 
-void GarminDevice::onFileParsed(quint8 type, quint8 subType, qint32 stamp, const QVector<GarminFitMessage>& messages)
-{
-    // The communicator only queues files newer than the saved stamp. The stamp
-    // is in seconds on the watch's own epoch.
-    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_SLEEP) {
-        QVector<GarminSleepSample> samples;
-        QDateTime assessmentStart;
-        int score = 0;
-        buildGarminSleepSamples(messages, samples);
-        buildGarminSleepAssessment(messages, assessmentStart, score);
-        if (samples.isEmpty() && !assessmentStart.isValid()) {
-            // A rest detection with no stages and no score: nothing to store,
-            // but the file is done with. Advance the stamp so it is not
-            // fetched again on every sync.
-            qDebug() << Q_FUNC_INFO << "Garmin: sleep file has no stages and no score, skipping";
-            AmazfishConfig::instance()->setValue(STAMP_SLEEP, stamp);
-            return;
-        }
-        if (saveSleepData(samples, assessmentStart, score)) {
-            AmazfishConfig::instance()->setValue(STAMP_SLEEP, stamp);
-        }
-        return;
-    }
-    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_HRV) {
-        QVector<GarminHrvSample> samples;
-        buildGarminHrvSamples(messages, samples);
-        if (samples.isEmpty()) {
-            // A file with no 5 minute values: nothing to store, but the file
-            // is done with. Advance the stamp so it is not fetched again.
-            qDebug() << Q_FUNC_INFO << "Garmin: hrv file has no values, skipping";
-            AmazfishConfig::instance()->setValue(STAMP_HRV, stamp);
-            return;
-        }
-        if (saveHrvData(samples)) {
-            AmazfishConfig::instance()->setValue(STAMP_HRV, stamp);
-        }
-        return;
-    }
-    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_MONITOR) {
-        QVector<GarminMonitorSample> samples;
-        QVector<GarminSpo2Sample> spo2Samples;
-        QVector<GarminStressSample> stressSamples;
-        QVector<GarminDailyCaloriesSample> caloriesSamples;
-        buildGarminMonitorSamples(messages, samples);
-        buildGarminSpo2Samples(messages, spo2Samples);
-        buildGarminStressSamples(messages, stressSamples);
-        buildGarminDailyCaloriesSamples(messages, caloriesSamples);
-        if (samples.isEmpty() && spo2Samples.isEmpty() && stressSamples.isEmpty() && caloriesSamples.isEmpty()) {
-            // No heart rate, no step movement, no blood oxygen, no stress and
-            // no calories: nothing to store, but the file is done with.
-            // Advance the stamp.
-            qDebug() << Q_FUNC_INFO << "Garmin: monitor file has no samples, skipping";
-            AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
-            return;
-        }
-        bool saved = true;
-        if (!samples.isEmpty() && !saveMonitorData(samples)) {
-            saved = false;
-        }
-        if (!spo2Samples.isEmpty() && !saveSpo2Data(spo2Samples)) {
-            saved = false;
-        }
-        if (!stressSamples.isEmpty() && !saveStressData(stressSamples)) {
-            saved = false;
-        }
-        if (!caloriesSamples.isEmpty() && !saveDailyCaloriesData(caloriesSamples)) {
-            saved = false;
-        }
-        // Move the stamp only when every domain the file offered is stored.
-        // Otherwise the file is fetched again and the rest can still arrive.
-        if (saved) {
-            AmazfishConfig::instance()->setValue(STAMP_MONITOR, stamp);
-        }
-        return;
-    }
-    if (type == DIR_TYPE_FIT && subType == DIR_SUBTYPE_METRICS) {
-        QVector<GarminVo2maxSample> samples;
-        buildGarminVo2maxSamples(messages, samples);
-        if (samples.isEmpty()) {
-            // Most metrics files hold other metrics and no VO2max reading.
-            // Nothing to store, but the file is done with. Advance the stamp
-            // so it is not fetched again.
-            qDebug() << Q_FUNC_INFO << "Garmin: metrics file has no vo2max reading, skipping";
-            AmazfishConfig::instance()->setValue(STAMP_METRICS, stamp);
-            return;
-        }
-        if (saveVo2maxData(samples)) {
-            AmazfishConfig::instance()->setValue(STAMP_METRICS, stamp);
-        }
-        return;
-    }
-    if (saveActivityMessages(messages)) {
-        AmazfishConfig::instance()->setValue(STAMP_ACTIVITY, stamp);
+    // The watch answers with a file list; the newest activity is what we want from it.
+    if (!mCommunicator->fetchData()) {
+        emit message(tr("An operation is currently running, please try later"));
     }
 }
 
@@ -1019,7 +928,7 @@ bool GarminDevice::saveVo2maxData(const QVector<GarminVo2maxSample>& samples)
 void GarminDevice::rescanActivityFiles()
 {
     if (!mCommunicator) {
-        qDebug() << Q_FUNC_INFO << "Garmin: no communicator, nothing to rescan";
+        qDebug() << Q_FUNC_INFO << "Garmin: no Communicator, nothing to rescan";
         return;
     }
 
@@ -1076,6 +985,7 @@ void GarminDevice::rescanNextFile()
                 } else if (saveMetricsMessages(messages)) {
                     ++mRescanSaved;
                 }
+                else qDebug() << Q_FUNC_INFO << "Garmin:" << path << " contains no monitoring or sleep data.";
             }
         }
         const int done = mRescanTotal - mRescanFiles.size();
